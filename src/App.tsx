@@ -504,16 +504,30 @@ export default function App() {
     }
 
     if (db.products !== undefined && Array.isArray(db.products)) {
-      const repaired = repairProductsList(db.products);
-      setProducts(repaired);
+      if (db.products.length > 0) {
+        const repaired = repairProductsList(db.products);
+        setProducts(repaired);
+      } else {
+        setProducts(prev => (prev && prev.length > 0 ? prev : repairProductsList([])));
+      }
     }
 
     if (db.activeAssets !== undefined && Array.isArray(db.activeAssets)) {
-      setActiveAssets(db.activeAssets);
+      if (db.activeAssets.length > 0) {
+        setActiveAssets(db.activeAssets);
+      } else {
+        setActiveAssets(prev => (prev && prev.length > 0 ? prev : DEFAULT_ACTIVE_ASSETS));
+      }
     }
 
     if (db.audits !== undefined && Array.isArray(db.audits)) {
-      setAudits(prev => smartMergeAudits(prev, db.audits));
+      setAudits(prev => {
+        const merged = smartMergeAudits(prev, db.audits);
+        if (merged.length > 0 && db.audits.length === 0 && isClientFirebaseActive()) {
+          saveDirectlyToFirestore({ audits: merged });
+        }
+        return merged;
+      });
     }
 
     if (db.vales !== undefined && Array.isArray(db.vales)) {
@@ -522,7 +536,11 @@ export default function App() {
         const map = new Map<string, Vale>();
         (prev || []).forEach(v => map.set(v.id, v));
         cleaned.forEach(v => map.set(v.id, v));
-        return Array.from(map.values());
+        const res = Array.from(map.values());
+        if (res.length > 0 && cleaned.length === 0 && isClientFirebaseActive()) {
+          saveDirectlyToFirestore({ vales: res });
+        }
+        return res;
       });
     }
 
@@ -532,17 +550,31 @@ export default function App() {
         const map = new Map<string, ReturnForecast>();
         (prev || []).forEach(f => map.set(f.id, f));
         cleaned.forEach(f => map.set(f.id, f));
-        return Array.from(map.values());
+        const res = Array.from(map.values());
+        if (res.length > 0 && cleaned.length === 0 && isClientFirebaseActive()) {
+          saveDirectlyToFirestore({ returnForecasts: res });
+        }
+        return res;
       });
     }
 
     if (db.fiscalAlerts !== undefined && Array.isArray(db.fiscalAlerts)) {
-      setFiscalAlerts(db.fiscalAlerts);
+      if (db.fiscalAlerts.length > 0) {
+        setFiscalAlerts(db.fiscalAlerts);
+      } else {
+        setFiscalAlerts(prev => (prev && prev.length > 0 ? prev : []));
+      }
     }
 
     // Smart Merge Imported Routes
     if (db.importedRoutes !== undefined && Array.isArray(db.importedRoutes)) {
-      setImportedRoutes(prev => smartMergeRoutes(prev, db.importedRoutes));
+      setImportedRoutes(prev => {
+        const merged = smartMergeRoutes(prev, db.importedRoutes);
+        if (merged.length > 0 && db.importedRoutes.length === 0 && isClientFirebaseActive()) {
+          saveDirectlyToFirestore({ importedRoutes: merged });
+        }
+        return merged;
+      });
     }
 
     if (db.audit_logs || db.auditLogs) {

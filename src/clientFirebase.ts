@@ -99,6 +99,13 @@ export function canonicalMapCode(mapCode: any): string {
   return noZeros || clean || str;
 }
 
+export function sanitizeDocId(rawId: any): string {
+  if (!rawId) return `item_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const str = String(rawId).trim();
+  const sanitized = str.replace(/[\/\s\.\#\$\[\]]/g, '_');
+  return sanitized || `item_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+}
+
 /**
   * Unique and stable document ID per collection
   */
@@ -106,25 +113,21 @@ export function getDocIdForCollection(colName: string, item: any): string {
   if (!item) return `item_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
   const mappedCol = COLLECTION_MAP[colName] || colName;
+  let rawId = "";
 
   if (mappedCol === "importedRoutes") {
     const mapKey = canonicalMapCode(item.routeMap);
     const dateStr = item.routeDate ? String(item.routeDate).trim() : "";
     if (mapKey && dateStr) {
-      return `${mapKey}_${dateStr}`;
+      rawId = `${mapKey}_${dateStr}`;
+    } else if (mapKey) {
+      rawId = mapKey;
+    } else if (item.id) {
+      rawId = String(item.id).trim();
     }
-    if (mapKey) {
-      return mapKey;
-    }
-    if (item.id) return String(item.id).trim();
-  }
-
-  if (mappedCol === "users") {
-    if (item.id) return String(item.id).trim();
-    if (item.username) return String(item.username).trim();
-  }
-
-  if (
+  } else if (mappedCol === "users") {
+    rawId = item.id ? String(item.id).trim() : (item.username ? String(item.username).trim() : "");
+  } else if (
     mappedCol === "drivers" ||
     mappedCol === "activeAssets" ||
     mappedCol === "audits" ||
@@ -133,30 +136,26 @@ export function getDocIdForCollection(colName: string, item: any): string {
     mappedCol === "fiscalAlerts" ||
     mappedCol === "auditLogs"
   ) {
-    if (item.id) return String(item.id).trim();
+    if (item.id) rawId = String(item.id).trim();
+  } else if (mappedCol === "vehicles") {
+    rawId = item.id ? String(item.id).trim() : (item.plate ? String(item.plate).trim() : "");
+  } else if (mappedCol === "products") {
+    rawId = item.code ? String(item.code).trim() : (item.id ? String(item.id).trim() : "");
   }
 
-  if (mappedCol === "vehicles") {
-    if (item.id) return String(item.id).trim();
-    if (item.plate) return String(item.plate).trim();
+  if (!rawId) {
+    if (item.id) rawId = String(item.id).trim();
+    else if (item.code) rawId = String(item.code).trim();
+    else if (item.plate) rawId = String(item.plate).trim();
+    else if (item.username) rawId = String(item.username).trim();
+    else if (item.routeMap) {
+      const mapStr = String(item.routeMap).trim();
+      const dateStr = item.routeDate ? String(item.routeDate).trim() : "";
+      rawId = dateStr ? `${mapStr}_${dateStr}` : mapStr;
+    }
   }
 
-  if (mappedCol === "products") {
-    if (item.code) return String(item.code).trim();
-    if (item.id) return String(item.id).trim();
-  }
-
-  if (item.id) return String(item.id).trim();
-  if (item.code) return String(item.code).trim();
-  if (item.plate) return String(item.plate).trim();
-  if (item.username) return String(item.username).trim();
-  if (item.routeMap) {
-    const mapStr = String(item.routeMap).trim();
-    const dateStr = item.routeDate ? String(item.routeDate).trim() : "";
-    return dateStr ? `${mapStr}_${dateStr}` : mapStr;
-  }
-
-  return `item_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  return sanitizeDocId(rawId);
 }
 
 export function getItemDocId(item: any): string {
