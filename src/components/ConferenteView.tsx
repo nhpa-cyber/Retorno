@@ -643,15 +643,16 @@ export default function ConferenteView({
 
   const findMapInfo = (mCode: string) => {
     const mapUpper = mCode.trim().toUpperCase();
-    const openItem = openRoutesList.find(x => x.routeMap.toUpperCase() === mapUpper);
+    const mapNorm = normalizeMapCode(mCode).toUpperCase();
+    const openItem = openRoutesList.find(x => x.routeMap.toUpperCase() === mapUpper || (mapNorm && normalizeMapCode(x.routeMap).toUpperCase() === mapNorm));
     if (openItem) {
       return { plate: openItem.plate, driverName: openItem.driverName };
     }
-    const impItem = importedRoutes.find(x => x.routeMap.toUpperCase() === mapUpper);
+    const impItem = importedRoutes.find(x => x.routeMap.toUpperCase() === mapUpper || (mapNorm && normalizeMapCode(x.routeMap).toUpperCase() === mapNorm));
     if (impItem) {
       return { plate: impItem.plate, driverName: (impItem as any).driverName };
     }
-    const audItem = audits.find(a => a.routeMap.toUpperCase() === mapUpper);
+    const audItem = audits.find(a => a.routeMap.toUpperCase() === mapUpper || (mapNorm && normalizeMapCode(a.routeMap).toUpperCase() === mapNorm));
     if (audItem) {
       return { plate: audItem.plate, driverName: getDriverName(audItem.driverId) };
     }

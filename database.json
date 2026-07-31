@@ -15237,6 +15237,48 @@
   ],
   "importedRoutes": [
     {
+      "id": "03114902_2026-07-31",
+      "routeMap": "03114902",
+      "routeDate": "2026-07-31",
+      "plate": "SLB3J76",
+      "driverId": "G1019",
+      "driverName": "DANILLO PEREIRA DOS SANTOS SILVA",
+      "status": "pendente",
+      "importedAt": "2026-07-31T15:18:07.231Z",
+      "updatedAt": "2026-07-31T15:18:07.232Z",
+      "itemsCount": 4,
+      "items": [
+        {
+          "code": "101",
+          "name": "SKOL 300ML C/24",
+          "qtyExpected": 25,
+          "type": "PA",
+          "un": "CX"
+        },
+        {
+          "code": "102",
+          "name": "BRAHMA CHOPP 350ML C/12",
+          "qtyExpected": 40,
+          "type": "PA",
+          "un": "CX"
+        },
+        {
+          "code": "201",
+          "name": "VASILHAME 300ML AMBEV",
+          "qtyExpected": 25,
+          "type": "AG",
+          "un": "CX"
+        },
+        {
+          "code": "202",
+          "name": "PALETE MADEIRA PADRÃO",
+          "qtyExpected": 2,
+          "type": "AG",
+          "un": "UN"
+        }
+      ]
+    },
+    {
       "routeDate": "2026-07-27",
       "routeMap": "15785",
       "importedAt": "2026-07-27T18:20:19.098Z",
