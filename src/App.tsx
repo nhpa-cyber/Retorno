@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { User, Driver, Vehicle, Product, ActiveAsset, AuditSession, ReturnForecast, FiscalAlert, ImportedRoute, Vale } from './types';
 import { DEFAULT_PRODUCTS, DEFAULT_USERS, DEFAULT_DRIVERS, DEFAULT_VEHICLES, DEFAULT_ACTIVE_ASSETS } from './data';
 import { ImageDB } from './imageDb';
-import { isClientFirebaseActive, fetchDirectlyFromFirestore, saveDirectlyToFirestore, subscribeToFirestore, getClientAuthError, getIsFirestoreQuotaExceeded, setFirestoreQuotaExceeded } from './clientFirebase';
+import { isClientFirebaseActive, fetchDirectlyFromFirestore, saveDirectlyToFirestore, subscribeToFirestore, seedAllPlatformDataToFirestore, getClientAuthError, getIsFirestoreQuotaExceeded, setFirestoreQuotaExceeded } from './clientFirebase';
 import Header from './components/Header';
 import ConferenteView from './components/ConferenteView';
 import FiscalView from './components/FiscalView';
@@ -583,13 +583,8 @@ export default function App() {
       setCurrentUser(defaultUser);
     }
 
-    // 2. Fetch latest online database from server (fallback when Firestore is not active)
+    // 2. Fetch latest online database from server on mount to ensure immediate state hydration
     const fetchLatestServerData = async () => {
-      if (isClientFirebaseActive()) {
-        // Quando o Firestore está ativo, o listener em tempo real (subscribeToFirestore)
-        // já entrega o primeiro snapshot como carga inicial, evitando leituras duplicadas.
-        return;
-      }
       try {
         const res = await fetch('/api/db');
         if (res.ok) {
@@ -601,8 +596,11 @@ export default function App() {
           const data = await res.json();
           if (data.success && data.db) {
             applyDirectDb(data.db);
+            if (isClientFirebaseActive()) {
+              seedAllPlatformDataToFirestore();
+            }
           } else {
-            console.log("Banco de dados do servidor está em branco ou indisponível. Ignorando auto-sobreposição para segurança.");
+            console.log("Banco de dados do servidor está em branco ou indisponível.");
           }
         }
       } catch (err) {
