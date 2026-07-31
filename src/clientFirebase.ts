@@ -100,15 +100,14 @@ export function getDocIdForCollection(colName: string, item: any): string {
   const mappedCol = COLLECTION_MAP[colName] || colName;
 
   if (mappedCol === "importedRoutes") {
+    if (item.id) return String(item.id).trim();
     const rawMap = item.routeMap ? String(item.routeMap).trim() : "";
-    const normMap = rawMap.replace(/^0+/, '');
-    const mapStr = normMap || rawMap;
     const dateStr = item.routeDate ? String(item.routeDate).trim() : "";
-    if (mapStr && dateStr) {
-      return `${mapStr}_${dateStr}`;
+    if (rawMap && dateStr) {
+      return `${rawMap}_${dateStr}`;
     }
-    if (mapStr) {
-      return mapStr;
+    if (rawMap) {
+      return rawMap;
     }
   }
 
