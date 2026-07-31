@@ -1,0 +1,10 @@
+{
+  "name": "Aferição de Retorno de Rota",
+  "description": "Plataforma de conferência de retorno de rota com controle físico de produtos e ativos de giro, reconciliação fiscal e dashboard gerencial.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
