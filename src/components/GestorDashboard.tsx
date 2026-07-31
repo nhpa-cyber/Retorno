@@ -652,6 +652,21 @@ export default function GestorDashboard({
     return importedRoutes[0]?.routeDate || new Date().toISOString().split('T')[0];
   });
 
+  React.useEffect(() => {
+    if (importedRoutes && importedRoutes.length > 0) {
+      const dates = Array.from(new Set(importedRoutes.map(r => r.routeDate).filter(Boolean))).sort().reverse();
+      const activeCount = importedRoutes.filter(r => r.routeDate === importDateFilter).length;
+      if (activeCount === 0 && dates.length > 0) {
+        const today = new Date().toISOString().split('T')[0];
+        if (dates.includes(today)) {
+          setImportDateFilter(today);
+        } else {
+          setImportDateFilter(dates[0]);
+        }
+      }
+    }
+  }, [importedRoutes, importDateFilter]);
+
   const handleUpdateAuditDiscrepancyAction = (
     auditId: string, 
     fields: { 

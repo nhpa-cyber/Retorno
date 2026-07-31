@@ -982,21 +982,21 @@ export default function FiscalView({
     return new Date().toISOString().split('T')[0];
   });
 
-  // Automatically update routeImportDate if selected date has 0 maps but importedRoutes has maps for another date
+  // Automatically update routeImportDate if selected date has 0 maps or is blank but importedRoutes has maps for available dates
   React.useEffect(() => {
     if (importedRoutes && importedRoutes.length > 0) {
+      const dates = Array.from(new Set(importedRoutes.map(r => r.routeDate).filter(Boolean))).sort().reverse();
       const activeCount = importedRoutes.filter(r => r.routeDate === routeImportDate).length;
-      if (activeCount === 0) {
-        const dates = Array.from(new Set(importedRoutes.map(r => r.routeDate).filter(Boolean))).sort().reverse();
+      if (activeCount === 0 && dates.length > 0) {
         const today = new Date().toISOString().split('T')[0];
         if (dates.includes(today)) {
           setRouteImportDate(today);
-        } else if (dates.length > 0) {
+        } else {
           setRouteImportDate(dates[0]);
         }
       }
     }
-  }, [importedRoutes]);
+  }, [importedRoutes, routeImportDate]);
 
   // Auto-assign and balance circular blitz routes (exactly 2 per day, swapping out pernoite vehicles)
   React.useEffect(() => {
