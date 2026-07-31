@@ -1133,7 +1133,7 @@ export default function FiscalView({
         if (cols.length <= Math.max(mapIndex, plateIndex)) continue;
 
         const rawMapCode = cols[mapIndex] || '';
-        const mapCode = rawMapCode.trim().replace(/^0+/, '');
+        const mapCode = rawMapCode.trim();
         const rawPlate = cols[plateIndex] || '';
         const plateClean = rawPlate.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 
@@ -1169,8 +1169,9 @@ export default function FiscalView({
           }
         }
 
+        const normMap = (s: string) => s.trim().toUpperCase().replace(/^0+/, '');
         // Avoid duplicate route maps in this file import
-        if (parsedRoutes.some(r => r.routeMap.trim().toUpperCase() === mapCode.trim().toUpperCase())) {
+        if (parsedRoutes.some(r => normMap(r.routeMap) === normMap(mapCode))) {
           continue;
         }
 
@@ -1194,21 +1195,23 @@ export default function FiscalView({
         return;
       }
 
+      const normMap = (s: string) => (s || '').trim().toUpperCase().replace(/^0+/, '');
       const nowISO = new Date().toISOString();
       let mergedRoutes = [...importedRoutes];
       if (isMerge) {
         // Merge mode
         parsedRoutes.forEach(newR => {
-          const existingIdx = mergedRoutes.findIndex(r => r.routeMap.trim().toUpperCase() === newR.routeMap.trim().toUpperCase() && (r.routeDate || '') === (newR.routeDate || ''));
+          const existingIdx = mergedRoutes.findIndex(r => normMap(r.routeMap) === normMap(newR.routeMap) && (r.routeDate || '') === (newR.routeDate || ''));
           if (existingIdx >= 0) {
             const currentRoute = mergedRoutes[existingIdx];
-            const isPendente = currentRoute.status === 'pendente';
+            const hasNewItems = newR.items && newR.items.length > 0;
             mergedRoutes[existingIdx] = {
               ...currentRoute,
+              routeMap: currentRoute.routeMap.length >= newR.routeMap.length ? currentRoute.routeMap : newR.routeMap,
               plate: newR.plate || currentRoute.plate,
               driverId: newR.driverId || currentRoute.driverId,
-              itemsCount: isPendente ? 0 : currentRoute.itemsCount,
-              items: isPendente ? [] : currentRoute.items,
+              itemsCount: hasNewItems ? newR.itemsCount : (currentRoute.itemsCount || currentRoute.items?.length || 0),
+              items: hasNewItems ? newR.items : (currentRoute.items || []),
               updatedAt: nowISO
             };
           } else {
@@ -1218,16 +1221,17 @@ export default function FiscalView({
       } else {
         // Standard overwrite if same routeMap and routeDate
         parsedRoutes.forEach(newR => {
-          const duplicateIdx = mergedRoutes.findIndex(r => r.routeMap.trim().toUpperCase() === newR.routeMap.trim().toUpperCase() && r.routeDate === newR.routeDate);
+          const duplicateIdx = mergedRoutes.findIndex(r => normMap(r.routeMap) === normMap(newR.routeMap) && r.routeDate === newR.routeDate);
           if (duplicateIdx >= 0) {
             const currentRoute = mergedRoutes[duplicateIdx];
-            const isPendente = currentRoute.status === 'pendente';
+            const hasNewItems = newR.items && newR.items.length > 0;
             mergedRoutes[duplicateIdx] = {
               ...currentRoute,
+              routeMap: currentRoute.routeMap.length >= newR.routeMap.length ? currentRoute.routeMap : newR.routeMap,
               plate: newR.plate || currentRoute.plate,
               driverId: newR.driverId || currentRoute.driverId,
-              itemsCount: isPendente ? 0 : currentRoute.itemsCount,
-              items: isPendente ? [] : currentRoute.items,
+              itemsCount: hasNewItems ? newR.itemsCount : (currentRoute.itemsCount || currentRoute.items?.length || 0),
+              items: hasNewItems ? newR.items : (currentRoute.items || []),
               updatedAt: nowISO
             };
           } else {
@@ -1273,11 +1277,12 @@ export default function FiscalView({
       return;
     }
 
-    const mapClean = manualMap.trim().replace(/^0+/, '');
+    const mapClean = manualMap.trim();
     const plateClean = manualPlate.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 
+    const normMap = (s: string) => (s || '').trim().toUpperCase().replace(/^0+/, '');
     // Check if map already exists
-    const mapExists = importedRoutes.some(r => r.routeMap.toUpperCase() === mapClean.toUpperCase() && r.routeDate === manualDate);
+    const mapExists = importedRoutes.some(r => normMap(r.routeMap) === normMap(mapClean) && r.routeDate === manualDate);
     if (mapExists) {
       alert(`O mapa ${mapClean} já está cadastrado para a data ${new Date(manualDate + 'T00:00:00').toLocaleDateString('pt-BR')}.`);
       return;

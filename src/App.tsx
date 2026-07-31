@@ -287,10 +287,10 @@ export default function App() {
     });
   };
 
-  // Normalization helper for Map Codes (strips leading zeros)
+  // Normalization helper for Map Codes
   const normalizeMapCode = (mapCode: any): string => {
     if (mapCode === undefined || mapCode === null) return '';
-    return String(mapCode).trim().replace(/^0+/, '');
+    return String(mapCode).trim();
   };
 
   const cleanAudits = (list: AuditSession[]): AuditSession[] => {
@@ -409,10 +409,27 @@ export default function App() {
       } else {
         const prevTime = new Date(prev.updatedAt || prev.importedAt || 0).getTime();
         const incTime = new Date(r.updatedAt || r.importedAt || 0).getTime();
+        const hasIncomingItems = r.items && r.items.length > 0;
+        const mergedItems = hasIncomingItems ? r.items : (prev.items || []);
+        const mergedItemsCount = hasIncomingItems ? r.itemsCount : (prev.itemsCount || mergedItems.length);
+        const mergedMapCode = (prev.routeMap && prev.routeMap.length >= (r.routeMap || '').length) ? prev.routeMap : r.routeMap;
+
         if (incTime >= prevTime) {
-          map.set(key, { ...prev, ...r });
+          map.set(key, {
+            ...prev,
+            ...r,
+            routeMap: mergedMapCode,
+            items: mergedItems,
+            itemsCount: mergedItemsCount
+          });
         } else {
-          map.set(key, { ...r, ...prev });
+          map.set(key, {
+            ...r,
+            ...prev,
+            routeMap: mergedMapCode,
+            items: mergedItems,
+            itemsCount: mergedItemsCount
+          });
         }
       }
     });
