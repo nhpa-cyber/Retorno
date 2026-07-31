@@ -140,13 +140,15 @@ if (typeof window !== 'undefined') {
 // Global custom Date formatting override to guarantee all dates across the app use dia-mês-ano (dd-mm-yyyy) with dashes
 const originalToLocaleDateString = Date.prototype.toLocaleDateString;
 Date.prototype.toLocaleDateString = function (this: Date, locales?: string | string[], options?: Intl.DateTimeFormatOptions) {
-  const result = originalToLocaleDateString.call(this, locales, options);
-  if (typeof result === 'string') {
-    if (result.includes('/')) {
+  try {
+    const result = originalToLocaleDateString.call(this, locales, options);
+    if (typeof result === 'string' && result.includes('/')) {
       return result.replace(/\//g, '-');
     }
+    return result;
+  } catch (e) {
+    return originalToLocaleDateString.call(this, locales, options);
   }
-  return result;
 };
 
 createRoot(document.getElementById('root')!).render(
