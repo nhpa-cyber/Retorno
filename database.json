@@ -15244,39 +15244,36 @@
       "driverId": "G1019",
       "driverName": "DANILLO PEREIRA DOS SANTOS SILVA",
       "status": "pendente",
-      "importedAt": "2026-07-31T15:18:07.231Z",
-      "updatedAt": "2026-07-31T15:18:07.232Z",
+      "importedAt": "2026-07-31T15:24:47.864Z",
+      "updatedAt": "2026-07-31T15:24:47.865Z",
       "itemsCount": 4,
       "items": [
         {
-          "code": "101",
-          "name": "SKOL 300ML C/24",
-          "qtyExpected": 25,
-          "type": "PA",
-          "un": "CX"
+          "productCode": "101",
+          "productDescription": "SKOL 300ML C/24",
+          "qty": 25,
+          "unit": "CX"
         },
         {
-          "code": "102",
-          "name": "BRAHMA CHOPP 350ML C/12",
-          "qtyExpected": 40,
-          "type": "PA",
-          "un": "CX"
+          "productCode": "102",
+          "productDescription": "BRAHMA CHOPP 350ML C/12",
+          "qty": 40,
+          "unit": "CX"
         },
         {
-          "code": "201",
-          "name": "VASILHAME 300ML AMBEV",
-          "qtyExpected": 25,
-          "type": "AG",
-          "un": "CX"
+          "productCode": "201",
+          "productDescription": "VASILHAME 300ML AMBEV",
+          "qty": 25,
+          "unit": "CX"
         },
         {
-          "code": "202",
-          "name": "PALETE MADEIRA PADRÃO",
-          "qtyExpected": 2,
-          "type": "AG",
-          "un": "UN"
+          "productCode": "202",
+          "productDescription": "PALETE MADEIRA PADRÃO",
+          "qty": 2,
+          "unit": "UN"
         }
-      ]
+      ],
+      "isBlitz": true
     },
     {
       "routeDate": "2026-07-27",

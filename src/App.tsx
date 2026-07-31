@@ -295,29 +295,56 @@ export default function App() {
 
   const cleanAudits = (list: AuditSession[]): AuditSession[] => {
     if (!list) return [];
-    return list.filter(Boolean).map(a => ({
-      ...a,
-      routeMap: normalizeMapCode(a.routeMap),
-      unifiedMaps: a.unifiedMaps ? a.unifiedMaps.map(normalizeMapCode) : undefined,
-    }));
+    const map = new Map<string, AuditSession>();
+    list.filter(Boolean).forEach(a => {
+      const id = a.id || Math.random().toString(36).substring(2);
+      const item: AuditSession = {
+        ...a,
+        id,
+        routeMap: a.routeMap ? String(a.routeMap).trim() : '',
+        unifiedMaps: a.unifiedMaps ? a.unifiedMaps.map(m => String(m).trim()) : undefined,
+      };
+      if (!map.has(id)) {
+        map.set(id, item);
+      } else {
+        const prev = map.get(id)!;
+        map.set(id, { ...prev, ...item });
+      }
+    });
+    return Array.from(map.values());
   };
 
   const cleanImportedRoutes = (list: ImportedRoute[]): ImportedRoute[] => {
     if (!list) return [];
     const now = new Date().toISOString();
-    return list.filter(Boolean).map(r => ({
-      ...r,
-      routeMap: normalizeMapCode(r.routeMap),
-      importedAt: r.importedAt || now,
-      updatedAt: r.updatedAt || r.importedAt || now
-    }));
+    const map = new Map<string, ImportedRoute>();
+    list.filter(Boolean).forEach(r => {
+      const routeMap = r.routeMap ? String(r.routeMap).trim() : '';
+      const routeDate = r.routeDate ? String(r.routeDate).trim() : '';
+      const fallbackId = routeMap && routeDate ? `${routeMap}_${routeDate}` : Math.random().toString(36).substring(2);
+      const id = r.id || fallbackId;
+      const item: ImportedRoute = {
+        ...r,
+        id,
+        routeMap,
+        importedAt: r.importedAt || now,
+        updatedAt: r.updatedAt || r.importedAt || now
+      };
+      if (!map.has(id)) {
+        map.set(id, item);
+      } else {
+        const prev = map.get(id)!;
+        map.set(id, { ...prev, ...item });
+      }
+    });
+    return Array.from(map.values());
   };
 
   const cleanVales = (list: Vale[]): Vale[] => {
     if (!list) return [];
     return list.map(v => ({
       ...v,
-      routeMap: v.routeMap ? normalizeMapCode(v.routeMap) : undefined
+      routeMap: v.routeMap ? String(v.routeMap).trim() : undefined
     }));
   };
 
@@ -325,7 +352,7 @@ export default function App() {
     if (!list) return [];
     return list.map(f => ({
       ...f,
-      routeMap: normalizeMapCode(f.routeMap)
+      routeMap: f.routeMap ? String(f.routeMap).trim() : ''
     }));
   };
 
@@ -354,20 +381,80 @@ export default function App() {
     }
   };
 
+  const smartMergeRoutes = (existing: ImportedRoute[], incoming: ImportedRoute[]): ImportedRoute[] => {
+    if (!incoming || incoming.length === 0) return existing || [];
+    if (!existing || existing.length === 0) return cleanImportedRoutes(incoming);
+
+    const map = new Map<string, ImportedRoute>();
+
+    const getRouteKey = (r: ImportedRoute) => {
+      const rawMap = r.routeMap ? String(r.routeMap).trim() : '';
+      const normMap = rawMap.replace(/^0+/, '');
+      const keyMap = normMap || rawMap;
+      const keyDate = r.routeDate ? String(r.routeDate).trim() : '';
+      return `${keyMap.toUpperCase()}_${keyDate}`;
+    };
+
+    existing.forEach(r => {
+      if (!r) return;
+      map.set(getRouteKey(r), r);
+    });
+
+    incoming.forEach(r => {
+      if (!r) return;
+      const key = getRouteKey(r);
+      const prev = map.get(key);
+      if (!prev) {
+        map.set(key, r);
+      } else {
+        const prevTime = new Date(prev.updatedAt || prev.importedAt || 0).getTime();
+        const incTime = new Date(r.updatedAt || r.importedAt || 0).getTime();
+        if (incTime >= prevTime) {
+          map.set(key, { ...prev, ...r });
+        } else {
+          map.set(key, { ...r, ...prev });
+        }
+      }
+    });
+
+    return cleanImportedRoutes(Array.from(map.values()));
+  };
+
+  const smartMergeAudits = (existing: AuditSession[], incoming: AuditSession[]): AuditSession[] => {
+    if (!incoming || incoming.length === 0) return existing || [];
+    if (!existing || existing.length === 0) return cleanAudits(incoming);
+
+    const map = new Map<string, AuditSession>();
+
+    existing.forEach(a => {
+      if (a && a.id) map.set(a.id, a);
+    });
+
+    incoming.forEach(a => {
+      if (!a || !a.id) return;
+      const prev = map.get(a.id);
+      if (!prev) {
+        map.set(a.id, a);
+      } else {
+        const prevTime = new Date(prev.updatedAt || (prev as any).createdAt || prev.startTime || 0).getTime();
+        const incTime = new Date(a.updatedAt || (a as any).createdAt || a.startTime || 0).getTime();
+        if (incTime >= prevTime) {
+          map.set(a.id, { ...prev, ...a });
+        } else {
+          map.set(a.id, { ...a, ...prev });
+        }
+      }
+    });
+
+    return cleanAudits(Array.from(map.values()));
+  };
+
   const applyDirectDb = (db: any) => {
     if (!db) return;
 
-    // Protection: If a local write was performed in the last 1.5 seconds, defer remote override to protect local user inputs/imports
-    if (Date.now() - lastWriteTime.current < 1500) {
-      console.log("[AppSync] Ignorando atualização remota temporariamente para proteger escrita local recente.");
-      return;
-    }
-
     if (db.users !== undefined && Array.isArray(db.users)) {
       const mergedUsersMap = new Map<string, User>();
-      // First populate defaults
       DEFAULT_USERS.forEach(u => mergedUsersMap.set(u.username.toLowerCase(), u));
-      // Then overlay remote users
       db.users.forEach((u: User) => {
         if (u && u.username) {
           mergedUsersMap.set(u.username.toLowerCase(), u);
@@ -384,11 +471,21 @@ export default function App() {
     }
 
     if (db.drivers !== undefined && Array.isArray(db.drivers)) {
-      setDrivers(db.drivers);
+      setDrivers(prev => {
+        const map = new Map<string, Driver>();
+        (prev || []).forEach(d => map.set(d.id, d));
+        db.drivers.forEach((d: Driver) => map.set(d.id, d));
+        return Array.from(map.values());
+      });
     }
 
     if (db.vehicles !== undefined && Array.isArray(db.vehicles)) {
-      setVehicles(db.vehicles);
+      setVehicles(prev => {
+        const map = new Map<string, Vehicle>();
+        (prev || []).forEach(v => map.set(v.plate, v));
+        db.vehicles.forEach((v: Vehicle) => map.set(v.plate, v));
+        return Array.from(map.values());
+      });
     }
 
     if (db.products !== undefined && Array.isArray(db.products)) {
@@ -401,18 +498,27 @@ export default function App() {
     }
 
     if (db.audits !== undefined && Array.isArray(db.audits)) {
-      const cleaned = cleanAudits(db.audits);
-      setAudits(cleaned);
+      setAudits(prev => smartMergeAudits(prev, db.audits));
     }
 
     if (db.vales !== undefined && Array.isArray(db.vales)) {
       const cleaned = cleanVales(db.vales);
-      setVales(cleaned);
+      setVales(prev => {
+        const map = new Map<string, Vale>();
+        (prev || []).forEach(v => map.set(v.id, v));
+        cleaned.forEach(v => map.set(v.id, v));
+        return Array.from(map.values());
+      });
     }
 
     if (db.returnForecasts !== undefined && Array.isArray(db.returnForecasts)) {
       const cleaned = cleanReturnForecasts(db.returnForecasts);
-      setReturnForecasts(cleaned);
+      setReturnForecasts(prev => {
+        const map = new Map<string, ReturnForecast>();
+        (prev || []).forEach(f => map.set(f.id, f));
+        cleaned.forEach(f => map.set(f.id, f));
+        return Array.from(map.values());
+      });
     }
 
     if (db.fiscalAlerts !== undefined && Array.isArray(db.fiscalAlerts)) {
@@ -420,9 +526,8 @@ export default function App() {
     }
 
     // Smart Merge Imported Routes
-    if (db.importedRoutes !== undefined) {
-      const remoteCleaned = cleanImportedRoutes(db.importedRoutes);
-      setImportedRoutes(remoteCleaned);
+    if (db.importedRoutes !== undefined && Array.isArray(db.importedRoutes)) {
+      setImportedRoutes(prev => smartMergeRoutes(prev, db.importedRoutes));
     }
 
     if (db.audit_logs || db.auditLogs) {
@@ -513,10 +618,6 @@ export default function App() {
     if (!clientPermissionDenied && isClientFirebaseActive()) {
       console.log("[ClientFirebase] Inicializando sincronização em tempo real nativa com Firestore...");
       const unsubscribe = subscribeToFirestore((db) => {
-        // Skip applying updates if there was a recent local write on this client to avoid race conditions
-        if (Date.now() - lastWriteTime.current < 1500) {
-          return;
-        }
         applyDirectDb(db);
       });
       return () => {
@@ -540,11 +641,6 @@ export default function App() {
             
             if (db.photos) {
               ImageDB.syncPhotos(db.photos).catch(e => console.error("Error syncing photos from SSE:", e));
-            }
-
-            // Skip applying updates if there was a recent local write on this client to avoid race conditions
-            if (Date.now() - lastWriteTime.current < 1500) {
-              return;
             }
 
             applyDirectDb(db);

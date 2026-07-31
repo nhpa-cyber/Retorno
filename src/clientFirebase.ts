@@ -100,7 +100,9 @@ export function getDocIdForCollection(colName: string, item: any): string {
   const mappedCol = COLLECTION_MAP[colName] || colName;
 
   if (mappedCol === "importedRoutes") {
-    const mapStr = item.routeMap ? String(item.routeMap).trim() : "";
+    const rawMap = item.routeMap ? String(item.routeMap).trim() : "";
+    const normMap = rawMap.replace(/^0+/, '');
+    const mapStr = normMap || rawMap;
     const dateStr = item.routeDate ? String(item.routeDate).trim() : "";
     if (mapStr && dateStr) {
       return `${mapStr}_${dateStr}`;
@@ -440,7 +442,7 @@ export async function saveDirectlyToFirestore(payload: any): Promise<boolean> {
       }
 
       if (Array.isArray(rawData)) {
-        await saveDocsToFirestore(colName, rawData, true);
+        await saveDocsToFirestore(colName, rawData, false);
       }
     }
     return true;
