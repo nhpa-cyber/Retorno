@@ -25,13 +25,11 @@ const formatDateToDiaMesAno = (dateStr?: string) => {
 };
 
 const normalizeMapCode = (mapCode: any): string => {
-  if (!mapCode) return '';
-  const str = String(mapCode).trim();
-  const digitsOnly = str.replace(/\D/g, '');
-  if (digitsOnly.length > 0) {
-    return String(parseInt(digitsOnly, 10));
-  }
-  return str;
+  if (mapCode === undefined || mapCode === null) return '';
+  const str = String(mapCode).trim().toUpperCase();
+  const clean = str.replace(/[\.\-\/\s]/g, '');
+  const noZeros = clean.replace(/^0+/, '');
+  return noZeros || clean || str;
 };
 
 const isSameMapCode = (a?: any, b?: any): boolean => {

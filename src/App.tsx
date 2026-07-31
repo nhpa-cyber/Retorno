@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { User, Driver, Vehicle, Product, ActiveAsset, AuditSession, ReturnForecast, FiscalAlert, ImportedRoute, Vale } from './types';
 import { DEFAULT_PRODUCTS, DEFAULT_USERS, DEFAULT_DRIVERS, DEFAULT_VEHICLES, DEFAULT_ACTIVE_ASSETS } from './data';
 import { ImageDB } from './imageDb';
-import { isClientFirebaseActive, fetchDirectlyFromFirestore, saveDirectlyToFirestore, subscribeToFirestore, seedAllPlatformDataToFirestore, getClientAuthError, getIsFirestoreQuotaExceeded, setFirestoreQuotaExceeded } from './clientFirebase';
+import { isClientFirebaseActive, fetchDirectlyFromFirestore, saveDirectlyToFirestore, subscribeToFirestore, seedAllPlatformDataToFirestore, canonicalMapCode, getClientAuthError, getIsFirestoreQuotaExceeded, setFirestoreQuotaExceeded } from './clientFirebase';
 import Header from './components/Header';
 import ConferenteView from './components/ConferenteView';
 import FiscalView from './components/FiscalView';
@@ -289,8 +289,7 @@ export default function App() {
 
   // Normalization helper for Map Codes
   const normalizeMapCode = (mapCode: any): string => {
-    if (mapCode === undefined || mapCode === null) return '';
-    return String(mapCode).trim();
+    return canonicalMapCode(mapCode);
   };
 
   const cleanAudits = (list: AuditSession[]): AuditSession[] => {
@@ -321,8 +320,9 @@ export default function App() {
     list.filter(Boolean).forEach(r => {
       const routeMap = r.routeMap ? String(r.routeMap).trim() : '';
       const routeDate = r.routeDate ? String(r.routeDate).trim() : '';
-      const fallbackId = routeMap && routeDate ? `${routeMap}_${routeDate}` : Math.random().toString(36).substring(2);
-      const id = r.id || fallbackId;
+      const mapKey = canonicalMapCode(routeMap);
+      const fallbackId = mapKey && routeDate ? `${mapKey}_${routeDate}` : (mapKey || Math.random().toString(36).substring(2));
+      const id = (mapKey && routeDate) ? `${mapKey}_${routeDate}` : (r.id || fallbackId);
       const item: ImportedRoute = {
         ...r,
         id,
@@ -388,11 +388,9 @@ export default function App() {
     const map = new Map<string, ImportedRoute>();
 
     const getRouteKey = (r: ImportedRoute) => {
-      const rawMap = r.routeMap ? String(r.routeMap).trim() : '';
-      const normMap = rawMap.replace(/^0+/, '');
-      const keyMap = normMap || rawMap;
+      const keyMap = canonicalMapCode(r.routeMap);
       const keyDate = r.routeDate ? String(r.routeDate).trim() : '';
-      return `${keyMap.toUpperCase()}_${keyDate}`;
+      return `${keyMap}_${keyDate}`;
     };
 
     existing.forEach(r => {

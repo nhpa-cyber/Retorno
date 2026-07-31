@@ -91,6 +91,14 @@ const TRACKED_COLLECTIONS = [
   "customManual"
 ];
 
+export function canonicalMapCode(mapCode: any): string {
+  if (mapCode === undefined || mapCode === null) return '';
+  const str = String(mapCode).trim().toUpperCase();
+  const clean = str.replace(/[\.\-\/\s]/g, '');
+  const noZeros = clean.replace(/^0+/, '');
+  return noZeros || clean || str;
+}
+
 /**
   * Unique and stable document ID per collection
   */
@@ -100,15 +108,15 @@ export function getDocIdForCollection(colName: string, item: any): string {
   const mappedCol = COLLECTION_MAP[colName] || colName;
 
   if (mappedCol === "importedRoutes") {
-    if (item.id) return String(item.id).trim();
-    const rawMap = item.routeMap ? String(item.routeMap).trim() : "";
+    const mapKey = canonicalMapCode(item.routeMap);
     const dateStr = item.routeDate ? String(item.routeDate).trim() : "";
-    if (rawMap && dateStr) {
-      return `${rawMap}_${dateStr}`;
+    if (mapKey && dateStr) {
+      return `${mapKey}_${dateStr}`;
     }
-    if (rawMap) {
-      return rawMap;
+    if (mapKey) {
+      return mapKey;
     }
+    if (item.id) return String(item.id).trim();
   }
 
   if (mappedCol === "users") {
