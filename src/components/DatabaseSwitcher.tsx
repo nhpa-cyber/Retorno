@@ -42,31 +42,31 @@ export const DatabaseSwitcher: React.FC<DatabaseSwitcherProps> = ({ onSwitchComp
   const activePresetId = getActivePresetId(activeProjectId);
 
   const handleConsolidateAll = async () => {
-    const targetPreset = FIREBASE_PRESETS.find(p => p.config.projectId === "banco-01-34be4") || FIREBASE_PRESETS[0];
+    const targetPreset = FIREBASE_PRESETS.find(p => p.config.projectId === activeProjectId) || FIREBASE_PRESETS.find(p => p.config.projectId === "banco-01-34be4") || FIREBASE_PRESETS[0];
     if (!targetPreset) return;
 
     setIsSyncing(true);
     setStatusMessage({
       type: 'success',
-      text: `Iniciando consolidação e registro global de TODOS os dados para o novo banco '${targetPreset.name}' (${targetPreset.config.projectId})...`
+      text: `Iniciando consolidação e sincronização unificada de TODOS os dados para o banco '${targetPreset.name}' (${targetPreset.config.projectId})...`
     });
 
     try {
       const res = await consolidateAllDataToTargetDatabase(targetPreset.config);
       setStatusMessage({
         type: 'success',
-        text: `Consolidação concluída com sucesso! ${res.totalSynced} documentos registrados de uma só vez em '${targetPreset.name}' (${targetPreset.config.projectId}). Detalhes: ${res.details.join(', ')}.`
+        text: `Sincronização concluída com sucesso! ${res.totalSynced} documentos unificados e preservados no banco '${targetPreset.name}' (${targetPreset.config.projectId}).`
       });
       if (onSwitchComplete) {
         onSwitchComplete();
       }
       setTimeout(() => {
         window.location.reload();
-      }, 1500);
+      }, 1200);
     } catch (err: any) {
       setStatusMessage({
         type: 'error',
-        text: `Erro na consolidação total: ${err?.message || 'Falha de conexão'}`
+        text: `Erro na consolidação: ${err?.message || 'Falha de conexão'}`
       });
     } finally {
       setIsSyncing(false);
@@ -303,16 +303,16 @@ export const DatabaseSwitcher: React.FC<DatabaseSwitcherProps> = ({ onSwitchComp
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
-                <Sparkles className="h-3 w-3 text-emerald-400" /> Registro Unificado Instantâneo
+                <Sparkles className="h-3 w-3 text-emerald-400" /> Sincronização e Preservação Total
               </span>
-              <span className="text-[11px] font-mono text-emerald-300 font-semibold">banco-01-34be4</span>
+              <span className="text-[11px] font-mono text-emerald-300 font-semibold">{activeProjectId || 'banco-01-34be4'}</span>
             </div>
             <h4 className="font-bold text-sm sm:text-base text-white flex items-center gap-2">
               <Layers className="h-4 w-4 text-emerald-400" />
-              Sincronizar e Registrar Todos os Dados
+              Sincronizar e Preservar Todos os Dados
             </h4>
             <p className="text-xs text-slate-300 max-w-xl">
-              Registra e sincroniza 100% das rotas, motoristas, veículos, produtos, auditorias, vales e manuais no banco oficial <span className="font-mono font-bold text-white">banco-01-34be4</span>!
+              Copia e unifica 100% das rotas, liberação de mapas, conferências, baixas, vales, motoristas, veículos e manuais entre <span className="font-mono text-emerald-300 font-bold">banco-01-34be4</span> e <span className="font-mono text-emerald-300 font-bold">banco-02-2fb6b</span> mantendo tudo totalmente sincronizado!
             </p>
           </div>
 

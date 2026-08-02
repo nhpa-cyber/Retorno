@@ -11,7 +11,9 @@ import {
   getIsFirestoreQuotaExceeded,
   fetchDirectlyFromFirestore,
   getLastSuccessfulSyncTime,
-  getActiveFirebaseConfig
+  getActiveFirebaseConfig,
+  resetFirebaseClientErrors,
+  getHasClientPermissionError
 } from '../clientFirebase';
 import { DatabaseSwitcher } from './DatabaseSwitcher';
 
@@ -1266,20 +1268,55 @@ export default function Header({
             </div>
 
             <div className="space-y-3 text-xs leading-relaxed">
-              <div className="p-3.5 bg-emerald-50/80 border border-emerald-200/80 rounded-xl space-y-1.5">
-                <div className="flex items-center justify-between font-semibold text-emerald-900">
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
-                    Status da Conexão:
-                  </span>
-                  <span className="bg-emerald-600 text-white px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono">
-                    100% Conectado
-                  </span>
+              {firebaseStatus === 'connected' && !isQuotaExceeded && !getHasClientPermissionError() ? (
+                <div className="p-3.5 bg-emerald-50/80 border border-emerald-200/80 rounded-xl space-y-1.5">
+                  <div className="flex items-center justify-between font-semibold text-emerald-900">
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+                      Status da Conexão:
+                    </span>
+                    <span className="bg-emerald-600 text-white px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono">
+                      100% Conectado
+                    </span>
+                  </div>
+                  <p className="text-emerald-700">
+                    Qualquer mapa, alteração ou conferência realizada no <strong>GitHub Pages</strong>, <strong>Computador</strong> ou <strong>Celular</strong> é propagada instantaneamente em tempo real para todos os colaboradores!
+                  </p>
                 </div>
-                <p className="text-emerald-700">
-                  Qualquer mapa, alteração ou conferência realizada no <strong>GitHub Pages</strong>, <strong>Computador</strong> ou <strong>Celular</strong> é propagada instantaneamente em tempo real para todos os colaboradores!
-                </p>
-              </div>
+              ) : (
+                <div className="p-3.5 bg-rose-50/90 border border-rose-200 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between font-semibold text-rose-900">
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-rose-500 animate-ping"></span>
+                      Status do Banco de Dados:
+                    </span>
+                    <span className="bg-rose-600 text-white px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono">
+                      Atenção / Restrição
+                    </span>
+                  </div>
+                  <p className="text-rose-800 text-[11px] leading-normal">
+                    {getHasClientPermissionError()
+                      ? `O banco de dados secundário (${getActiveFirebaseConfig()?.projectId || 'banco-02-2fb6b'}) exige que as Regras do Firestore (firestore.rules) ou o Login Anônimo estejam ativados no Console do Firebase.`
+                      : `A conexão com o banco (${getActiveFirebaseConfig()?.projectId || 'banco-02-2fb6b'}) não pôde ser estabelecida no momento.`}
+                  </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetFirebaseClientErrors();
+                        setFirebaseStatus('connecting');
+                        setTimeout(() => {
+                          setFirebaseStatus(getFirebaseConnectionState());
+                        }, 500);
+                      }}
+                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-[11px] flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      Tentar Reconectar Banco
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2 font-mono text-[11px] bg-slate-50 p-3 rounded-xl border border-slate-200">
                 <div>

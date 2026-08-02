@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Driver, Vehicle, Product, ActiveAsset, AuditSession, ReturnForecast, FiscalAlert, ImportedRoute, Vale } from './types';
-import { DEFAULT_PRODUCTS } from './data';
+import { DEFAULT_USERS, DEFAULT_DRIVERS, DEFAULT_VEHICLES, DEFAULT_PRODUCTS, DEFAULT_ACTIVE_ASSETS } from './data';
 import { ImageDB } from './imageDb';
 import { isClientFirebaseActive, fetchDirectlyFromFirestore, saveDirectlyToFirestore, subscribeToFirestore, getClientAuthError, getIsFirestoreQuotaExceeded, setFirestoreQuotaExceeded } from './clientFirebase';
 import Header from './components/Header';
@@ -19,11 +19,11 @@ export default function App() {
   const pushTimeoutRef = useRef<any>(null);
   const lastSyncAlertTime = useRef<number>(0);
   // Database states loaded from AppStore
-  const [users, setUsers] = useState<User[]>([]);
-  const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [activeAssets, setActiveAssets] = useState<ActiveAsset[]>([]);
+  const [users, setUsers] = useState<User[]>(DEFAULT_USERS);
+  const [drivers, setDrivers] = useState<Driver[]>(DEFAULT_DRIVERS);
+  const [vehicles, setVehicles] = useState<Vehicle[]>(DEFAULT_VEHICLES);
+  const [products, setProducts] = useState<Product[]>(DEFAULT_PRODUCTS);
+  const [activeAssets, setActiveAssets] = useState<ActiveAsset[]>(DEFAULT_ACTIVE_ASSETS);
   const [audits, setAudits] = useState<AuditSession[]>([]);
   const [vales, setVales] = useState<Vale[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -364,13 +364,12 @@ export default function App() {
     }
 
     if (db.users !== undefined && Array.isArray(db.users)) {
-      if (db.users.length > 0) {
-        setUsers(db.users);
-        const savedUserId = localStorage.getItem('logiroute_authenticated_user_id');
-        if (savedUserId) {
-          const matchedUser = db.users.find((u: User) => u.id === savedUserId);
-          if (matchedUser) setCurrentUser(matchedUser);
-        }
+      const activeUsers = db.users.length > 0 ? db.users : DEFAULT_USERS;
+      setUsers(activeUsers);
+      const savedUserId = localStorage.getItem('logiroute_authenticated_user_id');
+      const matchedUser = activeUsers.find((u: User) => u.id === savedUserId) || activeUsers.find((u: User) => u.id === 'usr_1') || activeUsers[0];
+      if (matchedUser) {
+        setCurrentUser(matchedUser);
       }
     }
 
@@ -738,6 +737,13 @@ export default function App() {
   }
 
   if (!currentUser) {
+    const savedUserId = localStorage.getItem('logiroute_authenticated_user_id');
+    const availableUsers = users.length > 0 ? users : DEFAULT_USERS;
+    const fallbackUser = availableUsers.find(u => u.id === savedUserId) || availableUsers.find(u => u.id === 'usr_1') || availableUsers[0];
+    if (fallbackUser) {
+      setCurrentUser(fallbackUser);
+      return null;
+    }
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
         <div className="text-white text-center">

@@ -135,6 +135,20 @@ export function isPermissionError(err: any): boolean {
   );
 }
 
+export function getHasClientPermissionError(): boolean {
+  return hasClientPermissionError;
+}
+
+export function resetFirebaseClientErrors(): void {
+  hasClientPermissionError = false;
+  isFirestoreQuotaExceeded = false;
+  lastAuthAttemptTime = 0;
+  clientAuthError = null;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('firestore_quota_restored'));
+  }
+}
+
 export function checkPermissionError(err: any) {
   if (err && isPermissionError(err)) {
     if (!hasClientPermissionError) {
@@ -207,12 +221,12 @@ export function getFirebaseConnectionState(): 'connected' | 'connecting' | 'disc
   return 'connected';
 }
 
-function triggerAnonymousAuth() {
+function triggerAnonymousAuth(targetApp?: any) {
   const now = Date.now();
   if (now - lastAuthAttemptTime < AUTH_COOLDOWN_MS) return;
 
   try {
-    const auth = getAuth();
+    const auth = targetApp ? getAuth(targetApp) : getAuth();
     if (auth.currentUser) {
       isAuthenticated = true;
       return;
@@ -260,6 +274,13 @@ export function getActiveFirebaseConfig(): any {
 
 export async function switchActiveFirebaseConfig(newConfig: any): Promise<boolean> {
   try {
+    hasClientPermissionError = false;
+    isFirestoreQuotaExceeded = false;
+    lastSuccessfulSyncTime = 0;
+    clientAuthError = null;
+    isAuthenticated = false;
+    isAuthenticating = false;
+
     if (typeof window !== "undefined") {
       localStorage.setItem("active_firebase_config", JSON.stringify(newConfig));
       localStorage.setItem("logiroute_firebase_client_config", JSON.stringify(newConfig));
@@ -353,10 +374,25 @@ export function getClientFirestore() {
       return null;
     }
 
-    const app = getApps().length === 0 ? initializeApp(config) : getApp();
+    let app: any;
+    const existingApps = getApps();
+    const activeAppName = `app_${config.projectId}`;
+
+    const defaultApp = existingApps.find(a => a.name === "[DEFAULT]");
+    if (defaultApp && defaultApp.options.projectId === config.projectId) {
+      app = defaultApp;
+    } else {
+      const existingNamedApp = existingApps.find(a => a.name === activeAppName);
+      if (existingNamedApp) {
+        app = existingNamedApp;
+      } else {
+        app = initializeApp(config, activeAppName);
+      }
+    }
+
     const dbId = (config.firestoreDatabaseId && config.firestoreDatabaseId !== "(default)") ? config.firestoreDatabaseId : undefined;
     firestoreInstance = dbId ? getFirestore(app, dbId) : getFirestore(app);
-    triggerAnonymousAuth();
+    triggerAnonymousAuth(app);
     return firestoreInstance;
   } catch (err) {
     console.warn("[ClientFirebase] Erro ao inicializar Firestore:", err);
@@ -669,7 +705,22 @@ export async function consolidateAllDataToTargetDatabase(targetConfig: any): Pro
   const details: string[] = [];
   let totalSynced = 0;
 
-  // Sync from local platform database server endpoint if available
+  // 1. Sync from other preset databases (e.g. Banco 01 -> Banco 02 or vice-versa)
+  for (const preset of FIREBASE_PRESETS) {
+    if (preset.config && preset.config.projectId && preset.config.projectId !== targetConfig.projectId) {
+      try {
+        const res = await syncFirebaseData(preset.config, targetConfig);
+        if (res.count > 0) {
+          totalSynced += res.count;
+          details.push(`${res.count} documentos migrados/copiados do banco '${preset.name}'`);
+        }
+      } catch (e: any) {
+        console.warn(`Falha ao consolidar de ${preset.id}:`, e);
+      }
+    }
+  }
+
+  // 2. Sync from local platform database server endpoint if available
   try {
     const res = await fetch('/api/database');
     if (res.ok) {
