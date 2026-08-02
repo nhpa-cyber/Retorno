@@ -25,22 +25,13 @@ const formatDateToDiaMesAno = (dateStr?: string) => {
 };
 
 const normalizeMapCode = (mapCode: any): string => {
-  if (mapCode === undefined || mapCode === null) return '';
-  const str = String(mapCode).trim().toUpperCase();
-  const clean = str.replace(/[\.\-\/\s]/g, '');
-  const noZeros = clean.replace(/^0+/, '');
-  return noZeros || clean || str;
-};
-
-const isSameMapCode = (a?: any, b?: any): boolean => {
-  if (a === undefined || a === null || b === undefined || b === null) return false;
-  const strA = String(a).trim().toUpperCase();
-  const strB = String(b).trim().toUpperCase();
-  if (!strA || !strB) return false;
-  if (strA === strB) return true;
-  const normA = normalizeMapCode(strA);
-  const normB = normalizeMapCode(strB);
-  return normA.length > 0 && normA === normB;
+  if (!mapCode) return '';
+  const str = String(mapCode).trim();
+  const digitsOnly = str.replace(/\D/g, '');
+  if (digitsOnly.length > 0) {
+    return String(parseInt(digitsOnly, 10));
+  }
+  return str;
 };
 
 interface ConferenteViewProps {
@@ -652,16 +643,15 @@ export default function ConferenteView({
 
   const findMapInfo = (mCode: string) => {
     const mapUpper = mCode.trim().toUpperCase();
-    const mapNorm = normalizeMapCode(mCode).toUpperCase();
-    const openItem = openRoutesList.find(x => x.routeMap.toUpperCase() === mapUpper || (mapNorm && normalizeMapCode(x.routeMap).toUpperCase() === mapNorm));
+    const openItem = openRoutesList.find(x => x.routeMap.toUpperCase() === mapUpper);
     if (openItem) {
       return { plate: openItem.plate, driverName: openItem.driverName };
     }
-    const impItem = importedRoutes.find(x => x.routeMap.toUpperCase() === mapUpper || (mapNorm && normalizeMapCode(x.routeMap).toUpperCase() === mapNorm));
+    const impItem = importedRoutes.find(x => x.routeMap.toUpperCase() === mapUpper);
     if (impItem) {
       return { plate: impItem.plate, driverName: (impItem as any).driverName };
     }
-    const audItem = audits.find(a => a.routeMap.toUpperCase() === mapUpper || (mapNorm && normalizeMapCode(a.routeMap).toUpperCase() === mapNorm));
+    const audItem = audits.find(a => a.routeMap.toUpperCase() === mapUpper);
     if (audItem) {
       return { plate: audItem.plate, driverName: getDriverName(audItem.driverId) };
     }
@@ -876,7 +866,7 @@ export default function ConferenteView({
     const targetMapsUpper = targetMaps.map(m => m.trim().toUpperCase());
 
     const existingActiveSession = audits.find(a => 
-      isSameMapCode(a.routeMap, finalRouteMap) && 
+      a.routeMap.toUpperCase() === finalRouteMap.toUpperCase() && 
       (a.status === 'em_aberto' || a.status === 'reconferencia')
     );
 
@@ -902,8 +892,8 @@ export default function ConferenteView({
     const existingMemberAudit = audits.find(a => 
       (a.status === 'em_aberto' || a.status === 'reconferencia') &&
       (
-        targetMapsUpper.some(tm => isSameMapCode(tm, a.routeMap)) ||
-        (a.unifiedMaps && a.unifiedMaps.some(um => targetMapsUpper.some(tm => isSameMapCode(tm, um))))
+        targetMapsUpper.includes(a.routeMap.toUpperCase()) ||
+        (a.unifiedMaps && a.unifiedMaps.some(um => targetMapsUpper.includes(um.toUpperCase())))
       )
     );
 
@@ -923,7 +913,7 @@ export default function ConferenteView({
     if (unifiedMaps && unifiedMaps.length > 0) {
       const combinedExchangesMap: { [key: string]: AuditExchangeItem } = {};
       unifiedMaps.forEach(mapCode => {
-        const r = importedRoutes.find(route => isSameMapCode(route.routeMap, mapCode));
+        const r = importedRoutes.find(route => route.routeMap.toUpperCase() === mapCode.toUpperCase());
         if (r && r.exchanges) {
           r.exchanges.forEach(ex => {
             const key = `${ex.productCode}_${ex.type}`;
@@ -937,7 +927,7 @@ export default function ConferenteView({
       });
       initialExchanges = Object.values(combinedExchangesMap);
     } else {
-      const matchingRoute = importedRoutes.find(r => isSameMapCode(r.routeMap, finalRouteMap));
+      const matchingRoute = importedRoutes.find(r => r.routeMap.toUpperCase() === finalRouteMap);
       if (matchingRoute && matchingRoute.exchanges) {
         initialExchanges = matchingRoute.exchanges;
       } else {
@@ -977,7 +967,7 @@ export default function ConferenteView({
         .filter(a => {
           if (a.id === sessionToActivate.id) return true;
           const isOtherMemberDuplicate = (a.status === 'em_aberto' || a.status === 'reconferencia') &&
-            targetMapsUpper.some(tm => isSameMapCode(tm, a.routeMap));
+            targetMapsUpper.includes(a.routeMap.toUpperCase());
           return !isOtherMemberDuplicate;
         });
 
@@ -985,8 +975,8 @@ export default function ConferenteView({
 
       if (onSaveImportedRoutes) {
         const updatedRoutes = importedRoutes.map(r => {
-          const isMatched = isSameMapCode(r.routeMap, finalRouteMap) ||
-            (targetMapsUpper.some(tm => isSameMapCode(tm, r.routeMap)));
+          const isMatched = r.routeMap.toUpperCase() === finalRouteMap ||
+            (targetMapsUpper.includes(r.routeMap.toUpperCase()));
           if (isMatched) {
             const newStatus: 'reconferir' | 'conferindo' = isReconferencia ? 'reconferir' : 'conferindo';
             return { ...r, status: newStatus };
@@ -1029,8 +1019,8 @@ export default function ConferenteView({
 
       if (onSaveImportedRoutes) {
         const updatedRoutes = importedRoutes.map(r => {
-          const isMatched = isSameMapCode(r.routeMap, finalRouteMap) ||
-            (unifiedMaps && unifiedMaps.some(m => isSameMapCode(m, r.routeMap)));
+          const isMatched = r.routeMap.toUpperCase() === finalRouteMap ||
+            (unifiedMaps && unifiedMaps.some(m => m.toUpperCase() === r.routeMap.toUpperCase()));
           if (isMatched) {
             return { ...r, status: 'conferindo' as const };
           }
@@ -1937,8 +1927,8 @@ export default function ConferenteView({
   // Helper to determine if a route is closed based on audits
   const isRouteClosedInAudits = (routeMap: string) => {
     return audits.some(a => 
-      (isSameMapCode(a.routeMap, routeMap) || 
-       (a.unifiedMaps && a.unifiedMaps.some(m => isSameMapCode(m, routeMap)))) &&
+      (a.routeMap.toUpperCase() === routeMap.toUpperCase() || 
+       (a.unifiedMaps && a.unifiedMaps.some(m => m.toUpperCase() === routeMap.toUpperCase()))) &&
       (a.status === 'finalizado_ok' || a.status === 'finalizado_divergente') &&
       !a.reopeningRequested
     );
@@ -1965,9 +1955,10 @@ export default function ConferenteView({
       const routeMapNorm = normalizeMapCode(route.routeMap).toUpperCase();
 
       const matchingAudit = audits.find(a => {
-        if (isSameMapCode(a.routeMap, route.routeMap)) return true;
+        const aNorm = normalizeMapCode(a.routeMap).toUpperCase();
+        if (aNorm === routeMapNorm || a.routeMap.toUpperCase() === routeMapUpper) return true;
         if (a.unifiedMaps) {
-          return a.unifiedMaps.some(m => isSameMapCode(m, route.routeMap));
+          return a.unifiedMaps.some(m => normalizeMapCode(m).toUpperCase() === routeMapNorm || m.toUpperCase() === routeMapUpper);
         }
         return false;
       });

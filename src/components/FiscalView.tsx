@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, Driver, Vehicle, Product, ActiveAsset, AuditSession, AuditItem, AuditAssetItem, AuditExchangeItem, FiscalAlert, ImportedRoute, RouteObservation, Vale, ReturnForecast, getAssetCode, getAssetCanonicalName } from '../types';
-import { isClientFirebaseActive, saveDirectlyToFirestore } from '../clientFirebase';
+import { isClientFirebaseActive, saveDirectlyToFirestore, deleteDocFromFirestore } from '../clientFirebase';
 import { ClipboardCheck, ShieldAlert, ArrowRight, ShieldCheck, CheckSquare, AlertTriangle, HelpCircle, Search, RefreshCw, XCircle, DollarSign, Calendar, SlidersHorizontal, FileSpreadsheet, Clock, CheckCircle2, Shield, Trash2, Camera, BarChart3, AlertCircle, Plus, PlusCircle, FileText, Check, Award, Eye, Calculator, Folder, Copy, X, ArrowUpCircle, ArrowDownCircle, Sparkles, FolderOpen, Download, FileCheck, PackageCheck } from 'lucide-react';
 import { ImageDB, PhotoRecord } from '../imageDb';
 import { jsPDF } from 'jspdf';
@@ -982,21 +982,21 @@ export default function FiscalView({
     return new Date().toISOString().split('T')[0];
   });
 
-  // Automatically update routeImportDate if selected date has 0 maps or is blank but importedRoutes has maps for available dates
+  // Automatically update routeImportDate if selected date has 0 maps but importedRoutes has maps for another date
   React.useEffect(() => {
     if (importedRoutes && importedRoutes.length > 0) {
-      const dates = Array.from(new Set(importedRoutes.map(r => r.routeDate).filter(Boolean))).sort().reverse();
       const activeCount = importedRoutes.filter(r => r.routeDate === routeImportDate).length;
-      if (activeCount === 0 && dates.length > 0) {
+      if (activeCount === 0) {
+        const dates = Array.from(new Set(importedRoutes.map(r => r.routeDate).filter(Boolean))).sort().reverse();
         const today = new Date().toISOString().split('T')[0];
         if (dates.includes(today)) {
           setRouteImportDate(today);
-        } else {
+        } else if (dates.length > 0) {
           setRouteImportDate(dates[0]);
         }
       }
     }
-  }, [importedRoutes, routeImportDate]);
+  }, [importedRoutes]);
 
   // Auto-assign and balance circular blitz routes (exactly 2 per day, swapping out pernoite vehicles)
   React.useEffect(() => {
@@ -1133,7 +1133,7 @@ export default function FiscalView({
         if (cols.length <= Math.max(mapIndex, plateIndex)) continue;
 
         const rawMapCode = cols[mapIndex] || '';
-        const mapCode = rawMapCode.trim();
+        const mapCode = rawMapCode.trim().replace(/^0+/, '');
         const rawPlate = cols[plateIndex] || '';
         const plateClean = rawPlate.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 
@@ -1169,9 +1169,8 @@ export default function FiscalView({
           }
         }
 
-        const normMap = (s: string) => s.trim().toUpperCase().replace(/^0+/, '');
         // Avoid duplicate route maps in this file import
-        if (parsedRoutes.some(r => normMap(r.routeMap) === normMap(mapCode))) {
+        if (parsedRoutes.some(r => r.routeMap.trim().toUpperCase() === mapCode.trim().toUpperCase())) {
           continue;
         }
 
@@ -1195,23 +1194,21 @@ export default function FiscalView({
         return;
       }
 
-      const normMap = (s: string) => (s || '').trim().toUpperCase().replace(/^0+/, '');
       const nowISO = new Date().toISOString();
       let mergedRoutes = [...importedRoutes];
       if (isMerge) {
         // Merge mode
         parsedRoutes.forEach(newR => {
-          const existingIdx = mergedRoutes.findIndex(r => normMap(r.routeMap) === normMap(newR.routeMap) && (r.routeDate || '') === (newR.routeDate || ''));
+          const existingIdx = mergedRoutes.findIndex(r => r.routeMap.trim().toUpperCase() === newR.routeMap.trim().toUpperCase() && (r.routeDate || '') === (newR.routeDate || ''));
           if (existingIdx >= 0) {
             const currentRoute = mergedRoutes[existingIdx];
-            const hasNewItems = newR.items && newR.items.length > 0;
+            const isPendente = currentRoute.status === 'pendente';
             mergedRoutes[existingIdx] = {
               ...currentRoute,
-              routeMap: currentRoute.routeMap.length >= newR.routeMap.length ? currentRoute.routeMap : newR.routeMap,
               plate: newR.plate || currentRoute.plate,
               driverId: newR.driverId || currentRoute.driverId,
-              itemsCount: hasNewItems ? newR.itemsCount : (currentRoute.itemsCount || currentRoute.items?.length || 0),
-              items: hasNewItems ? newR.items : (currentRoute.items || []),
+              itemsCount: isPendente ? 0 : currentRoute.itemsCount,
+              items: isPendente ? [] : currentRoute.items,
               updatedAt: nowISO
             };
           } else {
@@ -1221,17 +1218,16 @@ export default function FiscalView({
       } else {
         // Standard overwrite if same routeMap and routeDate
         parsedRoutes.forEach(newR => {
-          const duplicateIdx = mergedRoutes.findIndex(r => normMap(r.routeMap) === normMap(newR.routeMap) && r.routeDate === newR.routeDate);
+          const duplicateIdx = mergedRoutes.findIndex(r => r.routeMap.trim().toUpperCase() === newR.routeMap.trim().toUpperCase() && r.routeDate === newR.routeDate);
           if (duplicateIdx >= 0) {
             const currentRoute = mergedRoutes[duplicateIdx];
-            const hasNewItems = newR.items && newR.items.length > 0;
+            const isPendente = currentRoute.status === 'pendente';
             mergedRoutes[duplicateIdx] = {
               ...currentRoute,
-              routeMap: currentRoute.routeMap.length >= newR.routeMap.length ? currentRoute.routeMap : newR.routeMap,
               plate: newR.plate || currentRoute.plate,
               driverId: newR.driverId || currentRoute.driverId,
-              itemsCount: hasNewItems ? newR.itemsCount : (currentRoute.itemsCount || currentRoute.items?.length || 0),
-              items: hasNewItems ? newR.items : (currentRoute.items || []),
+              itemsCount: isPendente ? 0 : currentRoute.itemsCount,
+              items: isPendente ? [] : currentRoute.items,
               updatedAt: nowISO
             };
           } else {
@@ -1277,12 +1273,11 @@ export default function FiscalView({
       return;
     }
 
-    const mapClean = manualMap.trim();
+    const mapClean = manualMap.trim().replace(/^0+/, '');
     const plateClean = manualPlate.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 
-    const normMap = (s: string) => (s || '').trim().toUpperCase().replace(/^0+/, '');
     // Check if map already exists
-    const mapExists = importedRoutes.some(r => normMap(r.routeMap) === normMap(mapClean) && r.routeDate === manualDate);
+    const mapExists = importedRoutes.some(r => r.routeMap.toUpperCase() === mapClean.toUpperCase() && r.routeDate === manualDate);
     if (mapExists) {
       alert(`O mapa ${mapClean} já está cadastrado para a data ${new Date(manualDate + 'T00:00:00').toLocaleDateString('pt-BR')}.`);
       return;
@@ -3550,6 +3545,9 @@ export default function FiscalView({
                       "⚠️ Apagar Mapas do Dia?",
                       `Tem certeza que deseja apagar TODOS os ${activeDateRoutes.length} mapas importados para a data ${new Date(routeImportDate + 'T00:00:00').toLocaleDateString('pt-BR')}?`,
                       () => {
+                        activeDateRoutes.forEach(r => {
+                          if (r.id) deleteDocFromFirestore('importedRoutes', r.id);
+                        });
                         const updatedRoutes = importedRoutes.filter(r => r.routeDate !== routeImportDate);
                         if (onSaveImportedRoutes) {
                           onSaveImportedRoutes(updatedRoutes);
@@ -3860,6 +3858,9 @@ export default function FiscalView({
                                       "❌ Excluir Mapa?",
                                       `Tem certeza que deseja excluir permanentemente o mapa ${route.routeMap} (${route.plate})?`,
                                       () => {
+                                        if (route.id) {
+                                          deleteDocFromFirestore('importedRoutes', route.id);
+                                        }
                                         const updatedRoutes = importedRoutes.filter(r => r.id !== route.id);
                                         if (onSaveImportedRoutes) {
                                           onSaveImportedRoutes(updatedRoutes);
@@ -4202,6 +4203,9 @@ export default function FiscalView({
                                     "❌ Excluir Mapa?",
                                     `Tem certeza que deseja excluir permanentemente o mapa ${route.routeMap} (${route.plate})?`,
                                     () => {
+                                      if (route.id) {
+                                        deleteDocFromFirestore('importedRoutes', route.id);
+                                      }
                                       const updatedRoutes = importedRoutes.filter(r => r.id !== route.id);
                                       if (onSaveImportedRoutes) {
                                         onSaveImportedRoutes(updatedRoutes);

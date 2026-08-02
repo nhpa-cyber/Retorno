@@ -274,21 +274,6 @@ export default function MonitoramentoView({
     return uniqueDates[uniqueDates.length - 1] || new Date().toISOString().split('T')[0];
   });
 
-  React.useEffect(() => {
-    if (importedRoutes && importedRoutes.length > 0) {
-      const dates = Array.from(new Set(importedRoutes.map(r => r.routeDate).filter(Boolean))).sort().reverse();
-      const activeCount = importedRoutes.filter(r => r.routeDate === selectedDate).length;
-      if (activeCount === 0 && dates.length > 0) {
-        const today = new Date().toISOString().split('T')[0];
-        if (dates.includes(today)) {
-          setSelectedDate(today);
-        } else {
-          setSelectedDate(dates[0]);
-        }
-      }
-    }
-  }, [importedRoutes, selectedDate]);
-
   const routesForSelectedDate = importedRoutes.filter(r => r.routeDate === selectedDate && r.status !== 'fechado' && !isRouteClosedInAudits(r.routeMap));
 
   return (

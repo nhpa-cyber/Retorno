@@ -4,7 +4,8 @@ import { BarChart3, Users, Truck, ShoppingBag, Plus, Trash2, Shield, Clock, Land
 import { ImageDB, PhotoRecord } from '../imageDb';
 import { DEFAULT_USERS, DEFAULT_PRODUCTS, DEFAULT_DRIVERS, DEFAULT_VEHICLES } from '../data';
 import { DEFAULT_MANUAL_HTML } from './DefaultManualContent';
-import { isClientFirebaseActive, getGeminiKeyFromFirestore, saveGeminiKeyToFirestore } from '../clientFirebase';
+import { isClientFirebaseActive, getGeminiKeyFromFirestore, saveGeminiKeyToFirestore, deleteDocFromFirestore } from '../clientFirebase';
+import { DatabaseSwitcher } from './DatabaseSwitcher';
 // @ts-ignore
 import mammoth from 'mammoth';
 
@@ -652,21 +653,6 @@ export default function GestorDashboard({
     return importedRoutes[0]?.routeDate || new Date().toISOString().split('T')[0];
   });
 
-  React.useEffect(() => {
-    if (importedRoutes && importedRoutes.length > 0) {
-      const dates = Array.from(new Set(importedRoutes.map(r => r.routeDate).filter(Boolean))).sort().reverse();
-      const activeCount = importedRoutes.filter(r => r.routeDate === importDateFilter).length;
-      if (activeCount === 0 && dates.length > 0) {
-        const today = new Date().toISOString().split('T')[0];
-        if (dates.includes(today)) {
-          setImportDateFilter(today);
-        } else {
-          setImportDateFilter(dates[0]);
-        }
-      }
-    }
-  }, [importedRoutes, importDateFilter]);
-
   const handleUpdateAuditDiscrepancyAction = (
     auditId: string, 
     fields: { 
@@ -951,6 +937,9 @@ export default function GestorDashboard({
       `Tem certeza que deseja excluir permanentemente todos os ${count} mapas importados na data ${new Date(selectedDeleteDate + 'T00:00:00').toLocaleDateString('pt-BR')}? Esta ação removerá as rotas, auditorias e vales associados a esses mapas de forma definitiva.`,
       () => {
         const routesToDelete = importedRoutes.filter(r => r.routeDate === selectedDeleteDate);
+        routesToDelete.forEach(r => {
+          if (r.id) deleteDocFromFirestore('importedRoutes', r.id);
+        });
         const mapCodesToDelete = routesToDelete.map(r => r.routeMap.toUpperCase());
         
         const updatedRoutes = importedRoutes.filter(r => r.routeDate !== selectedDeleteDate);
@@ -4582,7 +4571,7 @@ export default function GestorDashboard({
                 <div className="border-b border-slate-100 pb-4 flex justify-between items-center">
                   <div>
                     <h3 className="font-sans font-bold text-base text-slate-900">Conexão Firebase Store</h3>
-                    <p className="text-xxs text-slate-400 mt-0.5">Visão geral do canal de sincronização em tempo real e persistência em nuvem.</p>
+                    <p className="text-xxs text-slate-400 mt-0.5">Visão geral do canal de sincronização em tempo real e alternador de bancos de dados.</p>
                   </div>
                   <button
                     onClick={fetchFirebaseStatus}
@@ -4593,6 +4582,9 @@ export default function GestorDashboard({
                     <span>Atualizar Conexão</span>
                   </button>
                 </div>
+
+                {/* 1-Click Database Switcher */}
+                <DatabaseSwitcher compact={false} onSwitchComplete={fetchFirebaseStatus} />
 
                 {/* Configuration Form Card matching the requested style */}
                 <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4 shadow-sm">
@@ -4627,7 +4619,7 @@ export default function GestorDashboard({
                           type="text"
                           value={formAuthDomain}
                           onChange={(e) => setFormAuthDomain(e.target.value)}
-                          placeholder="armazemfacil-b2292.firebaseapp.com"
+                          placeholder="banco-01-34be4.firebaseapp.com"
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400"
                           required
                         />
@@ -4640,7 +4632,7 @@ export default function GestorDashboard({
                           type="text"
                           value={formProjectId}
                           onChange={(e) => setFormProjectId(e.target.value)}
-                          placeholder="armazemfacil-b2292"
+                          placeholder="banco-01-34be4"
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400"
                           required
                         />
@@ -4657,7 +4649,7 @@ export default function GestorDashboard({
                           type="text"
                           value={formStorageBucket}
                           onChange={(e) => setFormStorageBucket(e.target.value)}
-                          placeholder="armazemfacil-b2292.appspot.com"
+                          placeholder="banco-01-34be4.firebasestorage.app"
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400"
                         />
                       </div>

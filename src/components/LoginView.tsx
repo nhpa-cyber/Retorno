@@ -3,6 +3,7 @@ import { User } from '../types';
 import { ShieldCheck, Truck, Lock, User as UserIcon, LogIn, Database, RefreshCw, FileText, Trash2, CheckCircle2, XCircle, SlidersHorizontal, Server } from 'lucide-react';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { isClientFirebaseActive } from '../clientFirebase';
+import { DatabaseSwitcher } from './DatabaseSwitcher';
 
 interface LoginViewProps {
   users: User[];
@@ -345,12 +346,19 @@ export default function LoginView({ users, onLoginSuccess }: LoginViewProps) {
             <div className="flex items-center space-x-2 pb-2 border-b border-slate-100">
               <SlidersHorizontal className="h-4 w-4 text-[#0f35a9]" />
               <h3 className="font-sans font-bold text-xs text-slate-800 uppercase tracking-wider">
-                Configuração da Conexão Firebase
+                Alternador de Banco de Dados Firebase
               </h3>
             </div>
 
-            <div className="space-y-4">
-              {/* API KEY */}
+            <DatabaseSwitcher compact={false} />
+
+            <div className="pt-2 border-t border-slate-100">
+              <details className="text-xs text-slate-500">
+                <summary className="font-semibold cursor-pointer text-slate-700 hover:text-blue-600 flex items-center gap-1">
+                  <SlidersHorizontal className="h-3.5 w-3.5" /> Exibir formulário completo de credenciais manuais
+                </summary>
+                <div className="space-y-4 mt-3 pt-3 border-t border-slate-100">
+                  {/* API KEY */}
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                   API KEY <span className="text-red-500">*</span>
@@ -515,7 +523,8 @@ export default function LoginView({ users, onLoginSuccess }: LoginViewProps) {
                   <span>Limpar</span>
                 </button>
               </div>
-
+                </div>
+              </details>
             </div>
           </div>
 

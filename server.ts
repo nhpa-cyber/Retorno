@@ -80,6 +80,22 @@ async function startServer() {
     res.json({ success: true, db: currentDb });
   });
 
+  // GET /api/export-database - Download complete JSON backup
+  app.get('/api/export-database', (req, res) => {
+    try {
+      if (fs.existsSync(DB_FILE)) {
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', 'attachment; filename="backup_completo_plataforma.json"');
+        const fileStream = fs.createReadStream(DB_FILE);
+        return fileStream.pipe(res);
+      } else {
+        return res.status(404).json({ success: false, error: 'Arquivo database.json ainda não foi gerado.' });
+      }
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erro ao exportar banco' });
+    }
+  });
+
   // --- FIREBASE CONFIGURATION ENDPOINTS ---
   const FIREBASE_CONFIG_FILE = path.join(process.cwd(), 'firebase-applet-config.json');
 
