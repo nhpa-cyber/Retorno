@@ -2336,10 +2336,12 @@ export default function GestorDashboard({
           
           {/* Status de Fechamento de Mapas (Visão Gráfica) */}
           {(() => {
+            const isRouteClosed = (routeMap: string) => audits.some(a => (a.routeMap?.toUpperCase() === routeMap?.toUpperCase() || (a.unifiedMaps && a.unifiedMaps.some((m: string) => m.toUpperCase() === routeMap?.toUpperCase()))) && (a.status === 'finalizado_ok' || a.status === 'finalizado_divergente'));
+
             const total = importedRoutes.length;
-            const closed = importedRoutes.filter(r => r.status === 'fechado').length;
-            const auditing = importedRoutes.filter(r => r.status === 'conferindo').length;
-            const pending = importedRoutes.filter(r => r.status === 'pendente').length;
+            const closed = importedRoutes.filter(r => r.status === 'fechado' || isRouteClosed(r.routeMap)).length;
+            const auditing = importedRoutes.filter(r => (r.status === 'conferindo' || r.status === 'reconferir') && !isRouteClosed(r.routeMap)).length;
+            const pending = importedRoutes.filter(r => (r.status === 'pendente' || !r.status) && r.status !== 'fechado' && !isRouteClosed(r.routeMap)).length;
 
             const closedPct = total > 0 ? (closed / total) * 100 : 0;
             const auditingPct = total > 0 ? (auditing / total) * 100 : 0;

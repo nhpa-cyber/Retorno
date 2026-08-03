@@ -330,9 +330,9 @@ export default function MonitoramentoView({
 
           {(() => {
             const total = importedRoutes.length;
-            const closed = importedRoutes.filter(r => r.status === 'fechado').length;
-            const auditing = importedRoutes.filter(r => r.status === 'conferindo').length;
-            const pending = importedRoutes.filter(r => r.status === 'pendente').length;
+            const closed = importedRoutes.filter(r => r.status === 'fechado' || isRouteClosedInAudits(r.routeMap)).length;
+            const auditing = importedRoutes.filter(r => (r.status === 'conferindo' || r.status === 'reconferir') && !isRouteClosedInAudits(r.routeMap)).length;
+            const pending = importedRoutes.filter(r => (r.status === 'pendente' || !r.status) && r.status !== 'fechado' && !isRouteClosedInAudits(r.routeMap)).length;
 
             const closedPct = total > 0 ? (closed / total) * 100 : 0;
             const auditingPct = total > 0 ? (auditing / total) * 100 : 0;

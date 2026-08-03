@@ -4055,8 +4055,8 @@ export default function FiscalView({
 
             {/* Process Progress Chart */}
             {(() => {
-              const totalWorking = importedRoutes.filter(r => r.status === 'conferindo' || r.status === 'reconferir').length;
-              const totalPending = importedRoutes.filter(r => r.status === 'pendente' || !r.status).length;
+              const totalWorking = importedRoutes.filter(r => (r.status === 'conferindo' || r.status === 'reconferir') && !isRouteClosed(r.routeMap)).length;
+              const totalPending = importedRoutes.filter(r => (r.status === 'pendente' || !r.status) && r.status !== 'fechado' && !isRouteClosed(r.routeMap)).length;
               const totalWaiting = pendingAudits.length;
               const totalReconciled = audits.filter(a => a.status === 'finalizado_ok' || a.status === 'finalizado_divergente').length;
 
