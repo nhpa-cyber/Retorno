@@ -46,6 +46,12 @@ function saveAndNotify(metrics: FirestoreDailyMetrics) {
   metrics.lastUpdated = Date.now();
   localStorage.setItem(key, JSON.stringify(metrics));
   window.dispatchEvent(new CustomEvent('firestore_metrics_changed', { detail: metrics }));
+
+  // Se o total de leituras do dia atingir ou ultrapassar 50.000 (limite gratuito de leituras do Firestore),
+  // dispara automaticamente a transição de banco de dados (Failover)
+  if (metrics.reads >= 50000 && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('firestore_quota_exceeded'));
+  }
 }
 
 export function recordReads(count: number = 1) {

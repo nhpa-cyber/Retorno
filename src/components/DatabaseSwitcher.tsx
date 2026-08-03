@@ -248,6 +248,18 @@ export const DatabaseSwitcher: React.FC<DatabaseSwitcherProps> = ({ onSwitchComp
           })}
         </div>
 
+        <button
+          type="button"
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent('trigger_auto_failover'));
+          }}
+          className="w-full text-center text-[10px] text-amber-800 hover:text-amber-950 bg-amber-50 hover:bg-amber-100 border border-amber-300 py-1.5 px-2 rounded-lg font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+          title="Simula a detecção automática de cota excedida e a troca para o outro banco"
+        >
+          <Sparkles className="h-3.5 w-3.5 text-amber-600" />
+          <span>Simular Transição Automática de Banco (Failover)</span>
+        </button>
+
         {statusMessage && (
           <div className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${
             statusMessage.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'

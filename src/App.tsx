@@ -11,6 +11,7 @@ import LoginView from './components/LoginView';
 import MonitoramentoView from './components/MonitoramentoView';
 import PlatformManual from './components/PlatformManual';
 import AIAgentChat from './components/AIAgentChat';
+import { AutoDatabaseFailover } from './components/AutoDatabaseFailover';
 import { ClipboardCheck, ShieldCheck, BarChart3, AlertCircle, Bell, CheckCircle2, Settings, RefreshCw } from 'lucide-react';
 
 export default function App() {
@@ -1154,6 +1155,9 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Failover Automático de Banco de Dados por Limite de Cota */}
+      <AutoDatabaseFailover />
     </div>
   );
 }
