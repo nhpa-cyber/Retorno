@@ -4,6 +4,7 @@ import { getAuth, signInAnonymously } from "firebase/auth";
 import firebaseConfig from "../firebase-applet-config.json";
 import { DEFAULT_USERS, DEFAULT_DRIVERS, DEFAULT_VEHICLES, DEFAULT_PRODUCTS, DEFAULT_ACTIVE_ASSETS } from "./data";
 import { FIREBASE_PRESETS } from "./firebasePresets";
+import { recordReads, recordWrites, recordDeletions } from "./firestoreMetrics";
 
 // Silence verbose or harmless Firestore warnings/info logs in browser
 try {
@@ -413,6 +414,7 @@ export async function saveDocToFirestore(colName: string, item: any): Promise<bo
     cleanItem.id = docId;
     const docRef = doc(db, targetCol, docId);
     await setDoc(docRef, cleanItem, { merge: true });
+    recordWrites(1);
     return true;
   } catch (err) {
     console.warn(`[ClientFirebase] Erro ao salvar documento na coleção '${colName}':`, err);
@@ -427,6 +429,7 @@ export async function deleteDocFromFirestore(colName: string, docId: string): Pr
     const targetCol = COLLECTION_MAP[colName] || colName;
     const docRef = doc(db, targetCol, docId);
     await deleteDoc(docRef);
+    recordDeletions(1);
     return true;
   } catch (err) {
     console.warn(`[ClientFirebase] Erro ao deletar documento '${docId}' da coleção '${colName}':`, err);
@@ -473,6 +476,10 @@ export async function saveDocsToFirestore(colName: string, items: any[], syncDel
         }
       });
       await batch.commit();
+      const setOpsCount = chunk.filter(o => o.type === 'set').length;
+      const delOpsCount = chunk.filter(o => o.type === 'delete').length;
+      if (setOpsCount > 0) recordWrites(setOpsCount);
+      if (delOpsCount > 0) recordDeletions(delOpsCount);
     }
     return true;
   } catch (err) {
@@ -542,6 +549,7 @@ export function subscribeToFirestore(onUpdate: (db: any) => void): () => void {
       if (colName === "customManual") {
         const docRef = doc(db, "customManual", "main");
         const unsub = onSnapshot(docRef, (docSnap) => {
+          recordReads(1);
           lastSuccessfulSyncTime = Date.now();
           if (typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent('firestore_synced', { detail: { time: lastSuccessfulSyncTime } }));
@@ -558,6 +566,8 @@ export function subscribeToFirestore(onUpdate: (db: any) => void): () => void {
       } else {
         const collRef = collection(db, colName);
         const unsub = onSnapshot(collRef, (snapshot) => {
+          const readsCount = snapshot.docChanges().length || snapshot.docs.length || 1;
+          recordReads(readsCount);
           lastSuccessfulSyncTime = Date.now();
           if (typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent('firestore_synced', { detail: { time: lastSuccessfulSyncTime } }));
@@ -642,6 +652,7 @@ export async function fetchDirectlyFromFirestore(): Promise<any> {
         if (colName === "customManual") {
           const docRef = doc(db, "customManual", "main");
           const snap = await getDoc(docRef);
+          recordReads(1);
           if (snap.exists()) {
             const data = snap.data();
             combinedDb.customManual = data.html || data.content || "";
@@ -649,6 +660,7 @@ export async function fetchDirectlyFromFirestore(): Promise<any> {
         } else {
           const collRef = collection(db, colName);
           const snap = await getDocs(collRef);
+          recordReads(snap.docs.length || 1);
           const items = snap.docs.map((d) => ({
             ...d.data(),
             id: d.id

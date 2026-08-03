@@ -3,7 +3,8 @@ import { User, UserRole, FiscalAlert } from '../types';
 import { 
   Shield, User as UserIcon, Truck, CheckCircle, BarChart3, Settings, 
   LogOut, FileSpreadsheet, Bell, Check, Clock, AlertCircle, FileText,
-  Sun, Moon, Folder, Smartphone, Download, Wifi, RefreshCw, ShieldCheck, X
+  Sun, Moon, Folder, Smartphone, Download, Wifi, RefreshCw, ShieldCheck, X,
+  Activity, BarChart2, Edit3, Save, RotateCcw
 } from 'lucide-react';
 import { 
   isClientFirebaseActive, 
@@ -16,6 +17,7 @@ import {
   getHasClientPermissionError
 } from '../clientFirebase';
 import { DatabaseSwitcher } from './DatabaseSwitcher';
+import { getDailyMetrics, setDailyMetrics, resetDailyMetrics, FirestoreDailyMetrics } from '../firestoreMetrics';
 
 interface HeaderProps {
   currentUser: User;
@@ -75,8 +77,25 @@ export default function Header({
   const [lastSyncTimestamp, setLastSyncTimestamp] = useState<number>(getLastSuccessfulSyncTime());
   const [isManualSyncing, setIsManualSyncing] = useState(false);
 
+  // Firestore Daily Operations Metrics State
+  const [dailyMetrics, setDailyMetricsState] = useState<FirestoreDailyMetrics>(getDailyMetrics());
+  const [showMetricsModal, setShowMetricsModal] = useState(false);
+  const [customReadsInput, setCustomReadsInput] = useState('');
+  const [customWritesInput, setCustomWritesInput] = useState('');
+  const [isEditingMetrics, setIsEditingMetrics] = useState(false);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
+    const handleMetricsChanged = (e: any) => {
+      if (e && e.detail) {
+        setDailyMetricsState(e.detail);
+      } else {
+        setDailyMetricsState(getDailyMetrics());
+      }
+    };
+
+    window.addEventListener('firestore_metrics_changed', handleMetricsChanged);
 
     const checkFirebaseActive = () => {
       try {
@@ -147,6 +166,7 @@ export default function Header({
       window.removeEventListener('firestore_quota_exceeded', handleQuotaExceeded);
       window.removeEventListener('firestore_quota_restored', handleQuotaRestored);
       window.removeEventListener('firestore_synced', handleFirestoreSynced);
+      window.removeEventListener('firestore_metrics_changed', handleMetricsChanged);
       clearInterval(interval);
     };
   }, []);
@@ -379,6 +399,29 @@ export default function Header({
                 </span>
                 <span className="uppercase tracking-wider text-[9px] inline sm:hidden whitespace-nowrap">
                   {isQuotaExceeded ? 'Local' : (getActiveFirebaseConfig()?.projectId?.split('-')[0] || 'Firebase')}
+                </span>
+              </button>
+
+              {/* Daily Firestore Reads & Writes Badge */}
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomReadsInput(String(dailyMetrics.reads));
+                  setCustomWritesInput(String(dailyMetrics.writes));
+                  setShowMetricsModal(true);
+                }}
+                className="flex items-center space-x-1.5 px-2 sm:px-2.5 py-1 rounded-full text-[10px] font-mono font-bold border border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 transition-all duration-300 shadow-xs cursor-pointer hover:scale-105 active:scale-95 shrink-0"
+                title="Acompanhamento de Leituras e Gravações do dia no Firestore (Clique para ver detalhes do uso)"
+              >
+                <Activity className="h-3 w-3 text-sky-400 shrink-0" />
+                <span className="uppercase tracking-wider text-[9px] flex items-center gap-1 whitespace-nowrap">
+                  <span className="text-sky-300 font-bold" title="Leituras hoje">
+                    📖 {dailyMetrics.reads >= 1000 ? `${(dailyMetrics.reads / 1000).toFixed(1)}k` : dailyMetrics.reads}
+                  </span>
+                  <span className="text-slate-500">|</span>
+                  <span className="text-amber-300 font-bold" title="Gravações hoje">
+                    ✏️ {dailyMetrics.writes >= 1000 ? `${(dailyMetrics.writes / 1000).toFixed(1)}k` : dailyMetrics.writes}
+                  </span>
                 </span>
               </button>
 
@@ -1380,6 +1423,212 @@ export default function Header({
               <button
                 onClick={() => setShowConnectionModal(false)}
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Acompanhamento de Leituras e Gravações do Dia (Firestore) */}
+      {showMetricsModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-5 text-slate-800">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-sky-500/10 border border-sky-500/20 rounded-xl text-sky-600">
+                  <Activity className="h-6 w-6 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-1.5">
+                    Acompanhamento de Uso do Firestore
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Métricas em tempo real e limites diários de Leituras / Gravações
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowMetricsModal(false);
+                  setIsEditingMetrics(false);
+                }}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs leading-relaxed">
+              {/* Daily Cards Grid */}
+              <div className="grid grid-cols-3 gap-2.5">
+                <div className="p-3 bg-sky-50 border border-sky-200 rounded-xl space-y-1 text-center">
+                  <span className="block text-[10px] font-sans uppercase tracking-wider text-sky-700 font-bold flex items-center justify-center gap-1">
+                    📖 Leituras
+                  </span>
+                  <span className="text-lg font-mono font-black text-sky-900 block">
+                    {dailyMetrics.reads.toLocaleString('pt-BR')}
+                  </span>
+                  <span className="text-[9px] text-sky-600 font-medium block">
+                    {((dailyMetrics.reads / 50000) * 100).toFixed(1)}% do plano grátis (50k)
+                  </span>
+                </div>
+
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1 text-center">
+                  <span className="block text-[10px] font-sans uppercase tracking-wider text-amber-700 font-bold flex items-center justify-center gap-1">
+                    ✏️ Gravações
+                  </span>
+                  <span className="text-lg font-mono font-black text-amber-900 block">
+                    {dailyMetrics.writes.toLocaleString('pt-BR')}
+                  </span>
+                  <span className="text-[9px] text-amber-600 font-medium block">
+                    {((dailyMetrics.writes / 20000) * 100).toFixed(1)}% do plano grátis (20k)
+                  </span>
+                </div>
+
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl space-y-1 text-center">
+                  <span className="block text-[10px] font-sans uppercase tracking-wider text-rose-700 font-bold flex items-center justify-center gap-1">
+                    🗑️ Exclusões
+                  </span>
+                  <span className="text-lg font-mono font-black text-rose-900 block">
+                    {dailyMetrics.deletions.toLocaleString('pt-BR')}
+                  </span>
+                  <span className="text-[9px] text-rose-600 font-medium block">
+                    Exclusões hoje
+                  </span>
+                </div>
+              </div>
+
+              {/* Progress Bars */}
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+                <div>
+                  <div className="flex justify-between text-[11px] font-semibold text-slate-700 mb-1">
+                    <span>Leituras Acumuladas no Dia</span>
+                    <span className="font-mono text-sky-700">{dailyMetrics.reads.toLocaleString('pt-BR')} / 50.000</span>
+                  </div>
+                  <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-500 ${
+                        dailyMetrics.reads > 45000 ? 'bg-rose-500' : dailyMetrics.reads > 30000 ? 'bg-amber-500' : 'bg-sky-500'
+                      }`}
+                      style={{ width: `${Math.min(100, (dailyMetrics.reads / 50000) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-[11px] font-semibold text-slate-700 mb-1">
+                    <span>Gravações Acumuladas no Dia</span>
+                    <span className="font-mono text-amber-700">{dailyMetrics.writes.toLocaleString('pt-BR')} / 20.000</span>
+                  </div>
+                  <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-500 ${
+                        dailyMetrics.writes > 18000 ? 'bg-rose-500' : dailyMetrics.writes > 12000 ? 'bg-amber-500' : 'bg-amber-500'
+                      }`}
+                      style={{ width: `${Math.min(100, (dailyMetrics.writes / 20000) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Explanation Card */}
+              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl space-y-1.5 text-blue-900">
+                <p className="font-bold flex items-center gap-1 text-[11px]">
+                  💡 Por que ocorrem leituras no Firestore?
+                </p>
+                <p className="text-[11px] leading-relaxed text-blue-800">
+                  O listener em tempo real (<code>onSnapshot</code>) escuta coleções inteiras como <code>importedRoutes</code>, <code>audits</code>, <code>users</code> e <code>products</code>. A cada reconexão de dispositivo ou atualização multi-usuário, o Firestore contabiliza 1 leitura por cada documento retornado.
+                </p>
+              </div>
+
+              {/* Calibration / Edit Form */}
+              {isEditingMetrics ? (
+                <div className="p-3 bg-slate-100 rounded-xl border border-slate-300 space-y-2.5">
+                  <span className="block font-bold text-slate-800 text-xs">Ajustar Números Manualmente (Aferição do Console):</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] text-slate-500 font-bold mb-1">Leituras (Reads):</label>
+                      <input
+                        type="number"
+                        value={customReadsInput}
+                        onChange={(e) => setCustomReadsInput(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-mono text-xs focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        placeholder="Ex: 32000"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 font-bold mb-1">Gravações (Writes):</label>
+                      <input
+                        type="number"
+                        value={customWritesInput}
+                        onChange={(e) => setCustomWritesInput(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg font-mono text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        placeholder="Ex: 5900"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const r = parseInt(customReadsInput, 10) || 0;
+                        const w = parseInt(customWritesInput, 10) || 0;
+                        setDailyMetrics({ reads: r, writes: w });
+                        setIsEditingMetrics(false);
+                      }}
+                      className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <Save className="h-3.5 w-3.5" />
+                      Salvar Ajuste
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingMetrics(false)}
+                      className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold transition cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomReadsInput(String(dailyMetrics.reads));
+                      setCustomWritesInput(String(dailyMetrics.writes));
+                      setIsEditingMetrics(true);
+                    }}
+                    className="text-xs text-sky-700 hover:text-sky-900 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                  >
+                    <Edit3 className="h-3.5 w-3.5" />
+                    Calibrar / Inserir números do Console
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm("Deseja zerar os contadores de hoje?")) {
+                        resetDailyMetrics();
+                      }
+                    }}
+                    className="text-xs text-slate-500 hover:text-rose-600 font-medium flex items-center gap-1 hover:underline cursor-pointer"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Zerar Contadores de Hoje
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end">
+              <button
+                onClick={() => {
+                  setShowMetricsModal(false);
+                  setIsEditingMetrics(false);
+                }}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs transition cursor-pointer"
               >
                 Fechar
               </button>
