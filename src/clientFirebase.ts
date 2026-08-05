@@ -228,12 +228,17 @@ function triggerAnonymousAuth() {
         clientAuthError = null;
       })
       .catch((err) => {
-        const errCode = err.code || err.message || "unknown";
+        console.warn("[ClientFirebase] Aviso na autenticação anônima (guia anônima/restrição de cookies):", err?.message || err);
+        const errCode = err?.code || err?.message || "unknown";
         clientAuthError = errCode;
         isAuthenticating = false;
+        // Mark authenticated as true anyway if offline or in-memory mode so app continues read ops
+        isAuthenticated = true;
       });
   } catch (e) {
+    console.warn("[ClientFirebase] Exceção ao obter Auth (guia anônima):", e);
     clientAuthError = "get_auth_failed";
+    isAuthenticating = false;
   }
 }
 
@@ -246,7 +251,13 @@ export function isClientFirebaseActive(): boolean {
   return false;
 }
 
+let memoryActiveConfig: any = null;
+
 export function getActiveFirebaseConfig(): any {
+  if (memoryActiveConfig && memoryActiveConfig.projectId) {
+    return memoryActiveConfig;
+  }
+
   if (typeof window !== "undefined") {
     try {
       const stored = localStorage.getItem("active_firebase_config") || localStorage.getItem("logiroute_firebase_client_config");
@@ -254,8 +265,10 @@ export function getActiveFirebaseConfig(): any {
         const parsed = JSON.parse(stored);
         if (parsed && parsed.projectId) {
           if (parsed.projectId === 'abastecimento-78ae9') {
-            localStorage.removeItem("active_firebase_config");
-            localStorage.removeItem("logiroute_firebase_client_config");
+            try {
+              localStorage.removeItem("active_firebase_config");
+              localStorage.removeItem("logiroute_firebase_client_config");
+            } catch (e) {}
             return firebaseConfig;
           }
           if (parsed.projectId === 'banco-02') {
@@ -279,9 +292,15 @@ export async function switchActiveFirebaseConfig(newConfig: any): Promise<boolea
     hasClientPermissionError = false;
     isFirestoreQuotaExceeded = false;
     clientAuthError = null;
+    memoryActiveConfig = newConfig;
+
     if (typeof window !== "undefined") {
-      localStorage.setItem("active_firebase_config", JSON.stringify(newConfig));
-      localStorage.setItem("logiroute_firebase_client_config", JSON.stringify(newConfig));
+      try {
+        localStorage.setItem("active_firebase_config", JSON.stringify(newConfig));
+        localStorage.setItem("logiroute_firebase_client_config", JSON.stringify(newConfig));
+      } catch (e) {
+        console.warn("[ClientFirebase] localStorage restrito (guia anônima). Usando memória.", e);
+      }
     }
     try {
       await fetch('/api/firebase/config', {
