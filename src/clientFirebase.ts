@@ -4,6 +4,7 @@ import { getAuth, signInAnonymously } from "firebase/auth";
 import firebaseConfig from "../firebase-applet-config.json";
 import { DEFAULT_USERS, DEFAULT_DRIVERS, DEFAULT_VEHICLES, DEFAULT_PRODUCTS, DEFAULT_ACTIVE_ASSETS } from "./data";
 import { FIREBASE_PRESETS } from "./firebasePresets";
+import { getCurrentScheduledPresetId, isAutoScheduleEnabled } from "./utils/databaseScheduler";
 
 // Silence verbose or harmless Firestore warnings/info logs in browser
 try {
@@ -443,6 +444,17 @@ export function getActiveFirebaseConfig(): any {
         }
       }
     } catch (e) {}
+
+    // If auto schedule is enabled and no stored config exists, pick the scheduled preset for current time
+    if (isAutoScheduleEnabled()) {
+      try {
+        const scheduledId = getCurrentScheduledPresetId();
+        const scheduledPreset = FIREBASE_PRESETS.find(p => p.id === scheduledId || p.config.projectId === scheduledId);
+        if (scheduledPreset) {
+          return scheduledPreset.config;
+        }
+      } catch (e) {}
+    }
   }
   return firebaseConfig;
 }

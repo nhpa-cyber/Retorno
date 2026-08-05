@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Clock, AlertTriangle, ArrowRight, RefreshCw, CheckCircle2, ShieldAlert, Sparkles, Volume2, Database, ShieldCheck } from 'lucide-react';
-import { getUpcomingDatabaseSwitchInfo, isAutoScheduleEnabled, UpcomingSwitchInfo, triggerGlobalDatabaseSwitch } from '../utils/databaseScheduler';
+import { getUpcomingDatabaseSwitchInfo, isAutoScheduleEnabled, UpcomingSwitchInfo, triggerGlobalDatabaseSwitch, getCurrentScheduledPresetId } from '../utils/databaseScheduler';
 import { getActiveFirebaseConfig, switchActiveFirebaseConfig, syncFirebaseData } from '../clientFirebase';
 import { FIREBASE_PRESETS } from '../firebasePresets';
 
@@ -195,7 +195,8 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
     const checkSchedule = () => {
       const enabled = isAutoScheduleEnabled();
       setAutoEnabled(enabled);
-      const info = getUpcomingDatabaseSwitchInfo(new Date());
+      const now = new Date();
+      const info = getUpcomingDatabaseSwitchInfo(now);
       setSwitchInfo(info);
 
       // Play sound or log when warning level changes
@@ -203,6 +204,18 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
         lastWarnedLevel.current = info.warningLevel;
         if (info.warningLevel !== 'none') {
           console.log(`[DatabaseScheduler] Warning Level: ${info.warningLevel} - ${info.remainingFormatted} remaining before switch to ${info.nextRule.name}`);
+        }
+      }
+
+      // Continuous Monitoring: Enforce the correct database preset for the current time of day
+      if (enabled && !isSwitchingRef.current && simulationSeconds === null) {
+        const scheduledPresetId = getCurrentScheduledPresetId(now);
+        const scheduledPreset = FIREBASE_PRESETS.find(p => p.id === scheduledPresetId || p.config.projectId === scheduledPresetId);
+
+        if (scheduledPreset && activeProjectId !== scheduledPreset.config.projectId) {
+          console.log(`[DatabaseScheduler] Horário atual (${now.toLocaleTimeString()}) exige o banco ${scheduledPreset.name} (${scheduledPreset.config.projectId}), mas o banco ativo local é ${activeProjectId}. Trocando automaticamente...`);
+          performSwitch(scheduledPreset.config, scheduledPreset.name);
+          return;
         }
       }
 
