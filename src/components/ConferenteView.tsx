@@ -455,20 +455,11 @@ export default function ConferenteView({
         if (activeSession.isSuspended) {
           setElapsedSeconds(Math.floor((activeSession.totalCountingDurationMs || 0) / 1000));
         } else {
-          let calculatedMs = 0;
-          if (activeSession.startTime) {
-            const startMs = new Date(activeSession.startTime).getTime();
-            if (!isNaN(startMs)) {
-              calculatedMs = Date.now() - startMs;
-            }
-          }
-          if ((!calculatedMs || calculatedMs <= 0) && activeSession.lastTimerStart) {
-            const timerStartMs = new Date(activeSession.lastTimerStart).getTime();
-            if (!isNaN(timerStartMs)) {
-              calculatedMs = (activeSession.totalCountingDurationMs || 0) + (Date.now() - timerStartMs);
-            }
-          }
-          setElapsedSeconds(Math.floor(Math.max(0, calculatedMs) / 1000));
+          const baseMs = activeSession.totalCountingDurationMs || 0;
+          const currentIntervalMs = activeSession.lastTimerStart 
+            ? (Date.now() - new Date(activeSession.lastTimerStart).getTime()) 
+            : 0;
+          setElapsedSeconds(Math.floor((baseMs + currentIntervalMs) / 1000));
         }
       };
       updateStopwatch();
@@ -488,7 +479,7 @@ export default function ConferenteView({
     return `${m}:${s}`;
   };
 
-  // Auto-persist active session ID in localStorage and restore on mount or audits update
+  // Auto-persist active session ID in localStorage and restore on mount
   useEffect(() => {
     if (activeSession) {
       localStorage.setItem('conferente_active_session_id', activeSession.id);
@@ -520,7 +511,7 @@ export default function ConferenteView({
         handleOpenSession(activeForUser);
       }
     }
-  }, [audits, activeSession, currentUser.id]);
+  }, []);
 
   const handleOpenSession = (audit: AuditSession) => {
     const nowStr = new Date().toISOString();
@@ -549,35 +540,24 @@ export default function ConferenteView({
       }));
     }
 
-    const auditStartTime = audit.startTime || nowStr;
-
     // Calculate accumulated elapsed duration from previous session run if active
     let accumulatedMs = audit.totalCountingDurationMs || 0;
-    if (!audit.isSuspended) {
-      if (audit.lastTimerStart) {
-        const delta = Date.now() - new Date(audit.lastTimerStart).getTime();
-        if (delta > 0 && !isNaN(delta)) {
-          accumulatedMs += delta;
-        }
-      } else if (auditStartTime) {
-        const delta = Date.now() - new Date(auditStartTime).getTime();
-        if (delta > 0 && !isNaN(delta)) {
-          accumulatedMs = delta;
-        }
+    if (!audit.isSuspended && audit.lastTimerStart) {
+      const delta = Date.now() - new Date(audit.lastTimerStart).getTime();
+      if (delta > 0 && !isNaN(delta)) {
+        accumulatedMs += delta;
       }
     }
 
     // If already suspended, don't start ticking. Else, tick starting now.
     const updatedSession: AuditSession = {
       ...audit,
-      startTime: auditStartTime,
-      lastTimerStart: audit.isSuspended ? undefined : (audit.lastTimerStart || nowStr),
+      lastTimerStart: audit.isSuspended ? undefined : nowStr,
       totalCountingDurationMs: accumulatedMs,
       exchanges: initialExchanges,
       assets: initialAssets
     };
     
-    localStorage.setItem('conferente_active_session_id', audit.id);
     setActiveSession(updatedSession);
     const updatedAudits = audits.map(a => a.id === audit.id ? updatedSession : a);
     onSaveAudits(updatedAudits);
@@ -960,25 +940,8 @@ export default function ConferenteView({
 
     if (existingMemberAudit) {
       const isReconferencia = existingMemberAudit.status === 'reconferencia';
-      const auditStartTime = existingMemberAudit.startTime || nowStr;
-      let accumMs = existingMemberAudit.totalCountingDurationMs || 0;
-      if (!existingMemberAudit.isSuspended && existingMemberAudit.lastTimerStart) {
-        const delta = Date.now() - new Date(existingMemberAudit.lastTimerStart).getTime();
-        if (delta > 0 && !isNaN(delta)) {
-          accumMs += delta;
-        }
-      } else if (!existingMemberAudit.isSuspended && auditStartTime) {
-        const delta = Date.now() - new Date(auditStartTime).getTime();
-        if (delta > 0 && !isNaN(delta)) {
-          accumMs = delta;
-        }
-      }
-
       sessionToActivate = {
         ...existingMemberAudit,
-        startTime: auditStartTime,
-        lastTimerStart: existingMemberAudit.isSuspended ? undefined : (existingMemberAudit.lastTimerStart || nowStr),
-        totalCountingDurationMs: accumMs,
         routeMap: finalRouteMap,
         unifiedMaps: unifiedMaps,
         plate: finalPlate.toUpperCase(),
@@ -992,7 +955,7 @@ export default function ConferenteView({
           ...(existingMemberAudit.history || []),
           {
             timestamp: nowStr,
-            action: 'Conferência Unificada / Retomada',
+            action: 'Conferência Unificada',
             user: currentUser.name,
             details: `Mapas unificados na mesma conferência: ${finalRouteMap} (KM Chegada: ${arrivalKm})`
           }
@@ -1372,11 +1335,6 @@ export default function ConferenteView({
       let finalDurationMs = updatedSession.totalCountingDurationMs || 0;
       if (!updatedSession.isSuspended && updatedSession.lastTimerStart) {
         finalDurationMs += Date.now() - new Date(updatedSession.lastTimerStart).getTime();
-      } else if (updatedSession.startTime && (!finalDurationMs || finalDurationMs <= 0)) {
-        const startMs = new Date(updatedSession.startTime).getTime();
-        if (!isNaN(startMs)) {
-          finalDurationMs = Math.max(0, Date.now() - startMs);
-        }
       }
 
       const finalizedSession: AuditSession = {
@@ -1477,11 +1435,6 @@ export default function ConferenteView({
     let finalDurationMs = activeSession.totalCountingDurationMs || 0;
     if (!activeSession.isSuspended && activeSession.lastTimerStart) {
       finalDurationMs += Date.now() - new Date(activeSession.lastTimerStart).getTime();
-    } else if (activeSession.startTime && (!finalDurationMs || finalDurationMs <= 0)) {
-      const startMs = new Date(activeSession.startTime).getTime();
-      if (!isNaN(startMs)) {
-        finalDurationMs = Math.max(0, Date.now() - startMs);
-      }
     }
 
     // Auto-associate any captured refugoPhotos to the refugos in the session
@@ -2194,7 +2147,7 @@ export default function ConferenteView({
   );
 
   return (
-    <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-4 sm:py-8 animate-fade-in" id="conferente_view">
+    <div className="w-full px-2 sm:px-6 lg:px-8 pt-3 pb-28 sm:pb-12 animate-fade-in overflow-x-hidden" id="conferente_view">
       
       {/* Banner / Instructions with Pau Brasil distribution look */}
       <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 rounded-2xl p-6 mb-8 text-white shadow-xl border border-blue-900 relative overflow-hidden">
@@ -2291,10 +2244,10 @@ export default function ConferenteView({
       })()}
 
       {!activeSession ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 w-full min-w-0">
           
           {/* LEFT & CENTER: Status of the Day + Pending Audits */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-7 xl:col-span-8 space-y-6 min-w-0">
             
             {/* STATUS DO DIA (Dashboard Widget) */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
@@ -2303,7 +2256,7 @@ export default function ConferenteView({
                 <span className="text-xxs font-semibold text-slate-400">Tempo real</span>
               </h3>
               
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 sm:gap-3">
                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-center">
                   <span className="text-xxs font-medium text-slate-400 block uppercase">Registros</span>
                   <span className="text-xl font-bold text-slate-900 block">{mapsToday}</span>
@@ -2320,7 +2273,7 @@ export default function ConferenteView({
                   <span className="text-xxs font-medium text-emerald-700 block uppercase">Baixa OK</span>
                   <span className="text-xl font-bold text-emerald-800 block">{mapsCompletedOk}</span>
                 </div>
-                <div className="bg-purple-50 p-3 rounded-lg border border-purple-100 text-center">
+                <div className="bg-purple-50 p-3 rounded-lg border border-purple-100 text-center col-span-2 sm:col-span-1">
                   <span className="text-xxs font-medium text-purple-700 block uppercase">Baixa Div.</span>
                   <span className="text-xl font-bold text-purple-800 block">{mapsCompletedDivergent}</span>
                 </div>
@@ -2575,7 +2528,7 @@ export default function ConferenteView({
           </div>
           
           {/* RIGHT: REGISTER RETURN FROM ROUTE PANEL */}
-          <div className="space-y-6">
+          <div className="lg:col-span-5 xl:col-span-4 space-y-6 min-w-0">
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="font-sans font-bold text-lg text-slate-900 flex items-center space-x-2">

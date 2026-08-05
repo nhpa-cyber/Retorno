@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Driver, Vehicle, Product, ActiveAsset, AuditSession, ReturnForecast, FiscalAlert, ImportedRoute, Vale } from './types';
-import { DEFAULT_USERS, DEFAULT_DRIVERS, DEFAULT_VEHICLES, DEFAULT_PRODUCTS, DEFAULT_ACTIVE_ASSETS } from './data';
+import { DEFAULT_PRODUCTS, DEFAULT_USERS } from './data';
 import { ImageDB } from './imageDb';
-import { isClientFirebaseActive, fetchDirectlyFromFirestore, saveDirectlyToFirestore, subscribeToFirestore, getClientAuthError, getIsFirestoreQuotaExceeded, setFirestoreQuotaExceeded } from './clientFirebase';
+import { isClientFirebaseActive, fetchDirectlyFromFirestore, saveDirectlyToFirestore, subscribeToFirestore, getClientAuthError, getIsFirestoreQuotaExceeded, setFirestoreQuotaExceeded, getActiveFirebaseConfig, switchActiveFirebaseConfig } from './clientFirebase';
 import Header from './components/Header';
 import ConferenteView from './components/ConferenteView';
 import FiscalView from './components/FiscalView';
@@ -11,7 +11,7 @@ import LoginView from './components/LoginView';
 import MonitoramentoView from './components/MonitoramentoView';
 import PlatformManual from './components/PlatformManual';
 import AIAgentChat from './components/AIAgentChat';
-import { AutoDatabaseFailover } from './components/AutoDatabaseFailover';
+import { DatabaseScheduleBanner } from './components/DatabaseScheduleBanner';
 import { ClipboardCheck, ShieldCheck, BarChart3, AlertCircle, Bell, CheckCircle2, Settings, RefreshCw } from 'lucide-react';
 
 export default function App() {
@@ -21,10 +21,10 @@ export default function App() {
   const lastSyncAlertTime = useRef<number>(0);
   // Database states loaded from AppStore
   const [users, setUsers] = useState<User[]>(DEFAULT_USERS);
-  const [drivers, setDrivers] = useState<Driver[]>(DEFAULT_DRIVERS);
-  const [vehicles, setVehicles] = useState<Vehicle[]>(DEFAULT_VEHICLES);
-  const [products, setProducts] = useState<Product[]>(DEFAULT_PRODUCTS);
-  const [activeAssets, setActiveAssets] = useState<ActiveAsset[]>(DEFAULT_ACTIVE_ASSETS);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [activeAssets, setActiveAssets] = useState<ActiveAsset[]>([]);
   const [audits, setAudits] = useState<AuditSession[]>([]);
   const [vales, setVales] = useState<Vale[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -36,7 +36,10 @@ export default function App() {
   const [importedRoutes, setImportedRoutes] = useState<ImportedRoute[]>([]);
 
   // Session & UI Navigation states
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const savedUserId = localStorage.getItem('logiroute_authenticated_user_id');
+    return DEFAULT_USERS.find(u => u.id === savedUserId) || DEFAULT_USERS.find(u => u.role === 'gestor') || DEFAULT_USERS[0] || null;
+  });
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem('logiroute_is_authenticated') === 'true';
   });
@@ -368,9 +371,13 @@ export default function App() {
       const activeUsers = db.users.length > 0 ? db.users : DEFAULT_USERS;
       setUsers(activeUsers);
       const savedUserId = localStorage.getItem('logiroute_authenticated_user_id');
-      const matchedUser = activeUsers.find((u: User) => u.id === savedUserId) || activeUsers.find((u: User) => u.id === 'usr_1') || activeUsers[0];
+      let matchedUser = activeUsers.find((u: User) => u.id === savedUserId);
+      if (!matchedUser) {
+        matchedUser = activeUsers.find((u: User) => u.role === 'gestor') || activeUsers[0];
+      }
       if (matchedUser) {
         setCurrentUser(matchedUser);
+        localStorage.setItem('logiroute_authenticated_user_id', matchedUser.id);
       }
     }
 
@@ -499,7 +506,7 @@ export default function App() {
     fetchLatestServerData();
   }, []);
 
-  // 4. Setup real-time database updates via Server-Sent Events (SSE) or Firestore Live Sync
+     // 4a. Setup real-time database updates via Firestore Live Sync if active
   useEffect(() => {
     if (!clientPermissionDenied && isClientFirebaseActive()) {
       console.log("[ClientFirebase] Inicializando sincronização em tempo real nativa com Firestore...");
@@ -515,30 +522,59 @@ export default function App() {
         unsubscribe();
       };
     }
+  }, [clientPermissionDenied]);
 
+  // 4b. Setup global server events (DB switch countdowns, config changes, schedule rules) via SSE
+  useEffect(() => {
     let eventSource: EventSource | null = null;
     let reconnectTimeout: any = null;
 
     const connectSSE = () => {
-      console.log("Conectando ao canal de sincronização em tempo real (SSE)...");
+      console.log("Conectando ao canal de sincronização de eventos do servidor (SSE)...");
       eventSource = new EventSource('/api/db/events');
 
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data && data.db) {
-            const db = data.db;
-            
-            if (db.photos) {
-              ImageDB.syncPhotos(db.photos).catch(e => console.error("Error syncing photos from SSE:", e));
+          
+          if (data) {
+            // Handle pending DB switch broadcast
+            if (data.pendingDbSwitch !== undefined) {
+              window.dispatchEvent(new CustomEvent('server_pending_switch_updated', { detail: data.pendingDbSwitch }));
             }
 
-            // Skip applying updates if there was a recent local write on this client to avoid race conditions
-            if (Date.now() - lastWriteTime.current < 1500) {
-              return;
+            // Handle config update broadcast across all connected devices
+            if (data.config && data.config.projectId) {
+              window.dispatchEvent(new CustomEvent('server_config_updated', { detail: data.config }));
+              const currentLocalConfig = getActiveFirebaseConfig();
+              if (currentLocalConfig?.projectId !== data.config.projectId) {
+                console.log(`[SSE] Servidor informou troca de banco para ${data.config.projectId}. Atualizando localmente...`);
+                switchActiveFirebaseConfig(data.config).then(() => {
+                  window.location.reload();
+                });
+              }
             }
 
-            applyDirectDb(db);
+            // Handle custom schedule rules broadcast
+            if (data.scheduleRules) {
+              window.dispatchEvent(new CustomEvent('server_schedule_rules_updated', { detail: data.scheduleRules }));
+            }
+
+            // Only apply direct JSON DB updates from SSE if client Firebase is NOT active
+            if (data.db && (!isClientFirebaseActive() || clientPermissionDenied)) {
+              const db = data.db;
+              
+              if (db.photos) {
+                ImageDB.syncPhotos(db.photos).catch(e => console.error("Error syncing photos from SSE:", e));
+              }
+
+              // Skip applying updates if there was a recent local write on this client to avoid race conditions
+              if (Date.now() - lastWriteTime.current < 1500) {
+                return;
+              }
+
+              applyDirectDb(db);
+            }
           }
         } catch (err) {
           console.error("Error parsing real-time database event:", err);
@@ -546,13 +582,13 @@ export default function App() {
       };
 
       eventSource.onerror = (err) => {
-        console.log("Canal de sincronização em tempo real (SSE) em modo de espera ou reconectando. Tentando reconexão automática em 5s...");
+        console.log("Canal de sincronização SSE em modo de espera ou reconectando. Tentando reconexão automática em 3s...");
         if (eventSource) {
           eventSource.close();
         }
         reconnectTimeout = setTimeout(() => {
           connectSSE();
-        }, 5000);
+        }, 3000);
       };
     };
 
@@ -738,16 +774,20 @@ export default function App() {
   }
 
   if (!currentUser) {
-    const savedUserId = localStorage.getItem('logiroute_authenticated_user_id');
     const availableUsers = users.length > 0 ? users : DEFAULT_USERS;
-    const fallbackUser = availableUsers.find(u => u.id === savedUserId) || availableUsers.find(u => u.id === 'usr_1') || availableUsers[0];
+    const savedUserId = localStorage.getItem('logiroute_authenticated_user_id');
+    const fallbackUser = availableUsers.find(u => u.id === savedUserId) 
+      || availableUsers.find(u => u.role === 'gestor') 
+      || availableUsers[0];
+
     if (fallbackUser) {
-      setCurrentUser(fallbackUser);
-      return null;
+      setTimeout(() => setCurrentUser(fallbackUser), 0);
     }
+
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
         <div className="text-white text-center">
+          <div className="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="font-semibold text-lg">Carregando plataforma de retornos...</p>
         </div>
       </div>
@@ -846,10 +886,13 @@ export default function App() {
         onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
       />
 
+      {/* Database Schedule Countdown Warning Banner */}
+      <DatabaseScheduleBanner currentUser={currentUser} />
+
       {/* Quota Exceeded Warning Banner */}
       {isQuotaExceeded && (
         <div className="bg-amber-500/10 border-b border-amber-500/20 text-amber-800 dark:text-amber-200 py-3.5 px-4" id="firestore_quota_warning_banner">
-          <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          <div className="w-full px-2 sm:px-6 lg:px-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
             <div className="flex items-start gap-2.5">
               <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
               <div>
@@ -1037,7 +1080,7 @@ export default function App() {
 
       {/* Sticky footer indicating production-ready definitive system */}
       <footer className="bg-white border-t border-slate-200 py-4 text-center text-xxs text-slate-400 font-medium font-sans">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-2">
+        <div className="w-full px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-2">
           <span>RETORNO DE ROTA PAU BRASIL GUARABIRA © 2026 • Sistema de Monitoramento e Máxima Eficiência de Retornos de Rota</span>
           <div className="flex items-center space-x-2">
             <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full border border-emerald-200 uppercase font-extrabold font-mono flex items-center gap-1">
@@ -1155,9 +1198,6 @@ export default function App() {
           </div>
         </div>
       )}
-
-      {/* Failover Automático de Banco de Dados por Limite de Cota */}
-      <AutoDatabaseFailover />
     </div>
   );
 }

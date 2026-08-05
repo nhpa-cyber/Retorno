@@ -98,18 +98,110 @@ async function startServer() {
 
   // --- FIREBASE CONFIGURATION ENDPOINTS ---
   const FIREBASE_CONFIG_FILE = path.join(process.cwd(), 'firebase-applet-config.json');
+  const SCHEDULE_RULES_FILE = path.join(process.cwd(), 'schedule-rules.json');
+
+  let pendingDbSwitch: {
+    targetPresetId?: string;
+    targetConfig?: any;
+    targetName?: string;
+    switchAtTimestamp: number;
+    startedAt: number;
+    requestedBy?: string;
+    requestedType?: string;
+  } | null = null;
+
+  let customScheduleRules: any = null;
+
+  try {
+    if (fs.existsSync(SCHEDULE_RULES_FILE)) {
+      const raw = fs.readFileSync(SCHEDULE_RULES_FILE, 'utf-8');
+      customScheduleRules = JSON.parse(raw);
+    }
+  } catch (e) {
+    console.warn('[Firebase] Failed to load schedule-rules.json:', e);
+  }
+
+  // Server background loop to process pending DB switches when timer expires
+  setInterval(() => {
+    if (pendingDbSwitch && pendingDbSwitch.switchAtTimestamp) {
+      if (Date.now() >= pendingDbSwitch.switchAtTimestamp) {
+        console.log(`[ServerDB] Timer de troca expirou. Alternando banco no servidor para: ${pendingDbSwitch.targetName || 'Novo Banco'}`);
+        if (pendingDbSwitch.targetConfig) {
+          try {
+            fs.writeFileSync(FIREBASE_CONFIG_FILE, JSON.stringify(pendingDbSwitch.targetConfig, null, 2), 'utf-8');
+            const newConfig = pendingDbSwitch.targetConfig;
+            pendingDbSwitch = null;
+            broadcastSSEUpdate({ pendingDbSwitch: null, config: newConfig });
+          } catch (err) {
+            console.error('[ServerDB] Erro ao gravar novo banco no disco:', err);
+          }
+        } else {
+          pendingDbSwitch = null;
+          broadcastSSEUpdate({ pendingDbSwitch: null });
+        }
+      }
+    }
+  }, 1000);
+
+  app.get('/api/firebase/schedule-rules', (req, res) => {
+    return res.json({ success: true, rules: customScheduleRules });
+  });
+
+  app.post('/api/firebase/schedule-rules', (req, res) => {
+    try {
+      const { rules } = req.body || {};
+      customScheduleRules = rules;
+      try {
+        fs.writeFileSync(SCHEDULE_RULES_FILE, JSON.stringify(rules, null, 2), 'utf-8');
+      } catch (e) {}
+      broadcastSSEUpdate({ scheduleRules: customScheduleRules, db: currentDb });
+      return res.json({ success: true, rules: customScheduleRules });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erro ao salvar horários de troca' });
+    }
+  });
+
+  app.get('/api/firebase/pending-switch', (req, res) => {
+    return res.json({ success: true, pendingSwitch: pendingDbSwitch });
+  });
+
+  app.post('/api/firebase/trigger-switch', (req, res) => {
+    try {
+      const { targetPresetId, targetConfig, targetName, countdownSeconds = 60, requestedBy, requestedType = 'manual' } = req.body || {};
+      const now = Date.now();
+      pendingDbSwitch = {
+        targetPresetId,
+        targetConfig,
+        targetName,
+        switchAtTimestamp: now + (countdownSeconds * 1000),
+        startedAt: now,
+        requestedBy: requestedBy || 'Gestor Administrador',
+        requestedType: requestedType || 'manual'
+      };
+      broadcastSSEUpdate({ pendingDbSwitch, db: currentDb });
+      return res.json({ success: true, pendingSwitch: pendingDbSwitch });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Erro ao iniciar troca de banco' });
+    }
+  });
+
+  app.post('/api/firebase/cancel-switch', (req, res) => {
+    pendingDbSwitch = null;
+    broadcastSSEUpdate({ pendingDbSwitch: null, db: currentDb });
+    return res.json({ success: true, message: 'Troca de banco de dados cancelada' });
+  });
 
   app.get('/api/firebase/config', (req, res) => {
     try {
       if (fs.existsSync(FIREBASE_CONFIG_FILE)) {
         const raw = fs.readFileSync(FIREBASE_CONFIG_FILE, 'utf-8');
         const config = JSON.parse(raw);
-        return res.json({ success: true, config });
+        return res.json({ success: true, config, pendingSwitch: pendingDbSwitch });
       }
     } catch (err) {
       console.error('[Firebase] Failed to read config file:', err);
     }
-    return res.json({ success: false, error: 'No configuration file found' });
+    return res.json({ success: false, error: 'No configuration file found', pendingSwitch: pendingDbSwitch });
   });
 
   app.post('/api/firebase/config', (req, res) => {
@@ -119,6 +211,8 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'API Key e Project ID são obrigatórios' });
       }
       fs.writeFileSync(FIREBASE_CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
+      pendingDbSwitch = null;
+      broadcastSSEUpdate({ pendingDbSwitch: null, config });
       return res.json({ success: true, message: 'Configuração salva com sucesso', config });
     } catch (err: any) {
       console.error('[Firebase] Failed to save config file:', err);

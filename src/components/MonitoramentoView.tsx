@@ -271,13 +271,13 @@ export default function MonitoramentoView({
   // Group imported routes by date
   const uniqueDates = Array.from(new Set(importedRoutes.map(r => r.routeDate))).sort();
   const [selectedDate, setSelectedDate] = useState(() => {
-    return uniqueDates[uniqueDates.length - 1] || new Date().toISOString().split('T')[0];
+    return new Date().toISOString().split('T')[0];
   });
 
   const routesForSelectedDate = importedRoutes.filter(r => r.routeDate === selectedDate && r.status !== 'fechado' && !isRouteClosedInAudits(r.routeMap));
 
   return (
-    <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-8" id="monitoramento_workspace">
+    <div className="w-full px-2 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-8" id="monitoramento_workspace">
       
       {/* Header Banner */}
       <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-sm border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -330,9 +330,9 @@ export default function MonitoramentoView({
 
           {(() => {
             const total = importedRoutes.length;
-            const closed = importedRoutes.filter(r => r.status === 'fechado' || isRouteClosedInAudits(r.routeMap)).length;
-            const auditing = importedRoutes.filter(r => (r.status === 'conferindo' || r.status === 'reconferir') && !isRouteClosedInAudits(r.routeMap)).length;
-            const pending = importedRoutes.filter(r => (r.status === 'pendente' || !r.status) && r.status !== 'fechado' && !isRouteClosedInAudits(r.routeMap)).length;
+            const closed = importedRoutes.filter(r => r.status === 'fechado').length;
+            const auditing = importedRoutes.filter(r => r.status === 'conferindo').length;
+            const pending = importedRoutes.filter(r => r.status === 'pendente').length;
 
             const closedPct = total > 0 ? (closed / total) * 100 : 0;
             const auditingPct = total > 0 ? (auditing / total) * 100 : 0;
@@ -482,10 +482,10 @@ export default function MonitoramentoView({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 w-full min-w-0">
         
         {/* LEFT 2 COLUMNS: MAPAS IMPORTADOS LIST */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-7 xl:col-span-8 space-y-6 min-w-0">
           <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-6">
             <h3 className="font-sans font-bold text-slate-900 text-base mb-4 uppercase tracking-wider flex items-center space-x-2">
               <FileSpreadsheet className="h-5 w-5 text-amber-500" />
@@ -831,7 +831,7 @@ export default function MonitoramentoView({
         </div>
 
         {/* RIGHT COLUMN: VEÍCULOS EM ABERTO & OVERNIGHT SUMMARY */}
-        <div className="space-y-6">
+        <div className="lg:col-span-5 xl:col-span-4 space-y-6 min-w-0">
           
           {/* Section: Veículos com Mapa em Aberto */}
           <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-6 space-y-4">

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, Driver, Vehicle, Product, ActiveAsset, AuditSession, AuditItem, AuditAssetItem, AuditExchangeItem, FiscalAlert, ImportedRoute, RouteObservation, Vale, ReturnForecast, getAssetCode, getAssetCanonicalName } from '../types';
-import { isClientFirebaseActive, saveDirectlyToFirestore, deleteDocFromFirestore } from '../clientFirebase';
+import { isClientFirebaseActive, saveDirectlyToFirestore } from '../clientFirebase';
 import { ClipboardCheck, ShieldAlert, ArrowRight, ShieldCheck, CheckSquare, AlertTriangle, HelpCircle, Search, RefreshCw, XCircle, DollarSign, Calendar, SlidersHorizontal, FileSpreadsheet, Clock, CheckCircle2, Shield, Trash2, Camera, BarChart3, AlertCircle, Plus, PlusCircle, FileText, Check, Award, Eye, Calculator, Folder, Copy, X, ArrowUpCircle, ArrowDownCircle, Sparkles, FolderOpen, Download, FileCheck, PackageCheck } from 'lucide-react';
 import { ImageDB, PhotoRecord } from '../imageDb';
 import { jsPDF } from 'jspdf';
@@ -982,7 +982,7 @@ export default function FiscalView({
     return new Date().toISOString().split('T')[0];
   });
 
-  // Automatically update routeImportDate if selected date has 0 maps but importedRoutes has maps for another date
+  // Automatically adjust routeImportDate when importedRoutes loads or changes if active date has 0 maps
   React.useEffect(() => {
     if (importedRoutes && importedRoutes.length > 0) {
       const activeCount = importedRoutes.filter(r => r.routeDate === routeImportDate).length;
@@ -996,7 +996,7 @@ export default function FiscalView({
         }
       }
     }
-  }, [importedRoutes]);
+  }, [importedRoutes, routeImportDate]);
 
   // Auto-assign and balance circular blitz routes (exactly 2 per day, swapping out pernoite vehicles)
   React.useEffect(() => {
@@ -3309,7 +3309,7 @@ export default function FiscalView({
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-4 sm:py-8" id="fiscal_view">
+    <div className="w-full px-2 sm:px-6 lg:px-8 py-4 sm:py-8" id="fiscal_view">
       {/* ALERTA DE MAPAS BAIXADOS PARA O FINANCEIRO (FECHAMENTO NO PROMAX) */}
       {currentUser.role === 'financeiro' && unacknowledgedBaixas.length > 0 && (
         <div className="mb-6 bg-gradient-to-r from-indigo-50 to-blue-50 border-2 border-indigo-200 rounded-2xl p-5 shadow-lg animate-fade-in">
@@ -3545,9 +3545,6 @@ export default function FiscalView({
                       "⚠️ Apagar Mapas do Dia?",
                       `Tem certeza que deseja apagar TODOS os ${activeDateRoutes.length} mapas importados para a data ${new Date(routeImportDate + 'T00:00:00').toLocaleDateString('pt-BR')}?`,
                       () => {
-                        activeDateRoutes.forEach(r => {
-                          if (r.id) deleteDocFromFirestore('importedRoutes', r.id);
-                        });
                         const updatedRoutes = importedRoutes.filter(r => r.routeDate !== routeImportDate);
                         if (onSaveImportedRoutes) {
                           onSaveImportedRoutes(updatedRoutes);
@@ -3858,9 +3855,6 @@ export default function FiscalView({
                                       "❌ Excluir Mapa?",
                                       `Tem certeza que deseja excluir permanentemente o mapa ${route.routeMap} (${route.plate})?`,
                                       () => {
-                                        if (route.id) {
-                                          deleteDocFromFirestore('importedRoutes', route.id);
-                                        }
                                         const updatedRoutes = importedRoutes.filter(r => r.id !== route.id);
                                         if (onSaveImportedRoutes) {
                                           onSaveImportedRoutes(updatedRoutes);
@@ -4056,7 +4050,7 @@ export default function FiscalView({
             {/* Process Progress Chart */}
             {(() => {
               const totalWorking = importedRoutes.filter(r => (r.status === 'conferindo' || r.status === 'reconferir') && !isRouteClosed(r.routeMap)).length;
-              const totalPending = importedRoutes.filter(r => (r.status === 'pendente' || !r.status) && r.status !== 'fechado' && !isRouteClosed(r.routeMap)).length;
+              const totalPending = importedRoutes.filter(r => (r.status === 'pendente' || !r.status) && (r.status as string) !== 'fechado' && !isRouteClosed(r.routeMap)).length;
               const totalWaiting = pendingAudits.length;
               const totalReconciled = audits.filter(a => a.status === 'finalizado_ok' || a.status === 'finalizado_divergente').length;
 
@@ -4203,9 +4197,6 @@ export default function FiscalView({
                                     "❌ Excluir Mapa?",
                                     `Tem certeza que deseja excluir permanentemente o mapa ${route.routeMap} (${route.plate})?`,
                                     () => {
-                                      if (route.id) {
-                                        deleteDocFromFirestore('importedRoutes', route.id);
-                                      }
                                       const updatedRoutes = importedRoutes.filter(r => r.id !== route.id);
                                       if (onSaveImportedRoutes) {
                                         onSaveImportedRoutes(updatedRoutes);
@@ -5750,9 +5741,9 @@ export default function FiscalView({
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 w-full min-w-0">
                 {/* Form to Issue Vale (Left) */}
-                <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4 shadow-xs h-fit">
+                <div className="lg:col-span-5 xl:col-span-4 bg-white rounded-xl border border-slate-200 p-6 space-y-4 shadow-xs h-fit min-w-0">
                   <h3 className="font-sans font-bold text-sm text-slate-900 border-b border-slate-100 pb-2 flex items-center space-x-1.5 font-bold">
                     <Plus className="h-4 w-4 text-amber-500" />
                     <span>Emitir Novo Vale de Desconto</span>
@@ -5975,7 +5966,7 @@ export default function FiscalView({
                 </div>
 
                 {/* List of generated vales (Right) */}
-                <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-6 space-y-4 shadow-xs">
+                <div className="lg:col-span-7 xl:col-span-8 bg-white rounded-xl border border-slate-200 p-6 space-y-4 shadow-xs min-w-0">
                   <h3 className="font-sans font-bold text-sm text-slate-900 border-b border-slate-100 pb-2 flex items-center justify-between font-bold">
                     <span className="flex items-center space-x-1.5">
                       <FileText className="h-4 w-4 text-slate-600" />
@@ -6850,10 +6841,10 @@ export default function FiscalView({
             return null;
           })()}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 w-full min-w-0">
             
             {/* Reconciliation Forms: Finished Products (PA) & Active Assets (AG) */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-7 xl:col-span-8 space-y-6 min-w-0">
               
               {/* Finished Products Reconciliation */}
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
@@ -7382,7 +7373,7 @@ export default function FiscalView({
             </div>
 
             {/* RIGHT SIDEBAR: Actions & Impact Summary */}
-            <div className="space-y-6">
+            <div className="lg:col-span-5 xl:col-span-4 space-y-6 min-w-0">
               
               {/* Financial Balance Summary */}
               <div className="bg-slate-900 text-white rounded-xl shadow-md border border-slate-800 p-6">

@@ -4,7 +4,6 @@ import { getAuth, signInAnonymously } from "firebase/auth";
 import firebaseConfig from "../firebase-applet-config.json";
 import { DEFAULT_USERS, DEFAULT_DRIVERS, DEFAULT_VEHICLES, DEFAULT_PRODUCTS, DEFAULT_ACTIVE_ASSETS } from "./data";
 import { FIREBASE_PRESETS } from "./firebasePresets";
-import { recordReads, recordWrites, recordDeletions } from "./firestoreMetrics";
 
 // Silence verbose or harmless Firestore warnings/info logs in browser
 try {
@@ -42,7 +41,8 @@ const TRACKED_COLLECTIONS = [
   "fiscalAlerts",
   "importedRoutes",
   "auditLogs",
-  "customManual"
+  "customManual",
+  "photos"
 ];
 
 /**
@@ -136,20 +136,6 @@ export function isPermissionError(err: any): boolean {
   );
 }
 
-export function getHasClientPermissionError(): boolean {
-  return hasClientPermissionError;
-}
-
-export function resetFirebaseClientErrors(): void {
-  hasClientPermissionError = false;
-  isFirestoreQuotaExceeded = false;
-  lastAuthAttemptTime = 0;
-  clientAuthError = null;
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new Event('firestore_quota_restored'));
-  }
-}
-
 export function checkPermissionError(err: any) {
   if (err && isPermissionError(err)) {
     if (!hasClientPermissionError) {
@@ -222,12 +208,12 @@ export function getFirebaseConnectionState(): 'connected' | 'connecting' | 'disc
   return 'connected';
 }
 
-function triggerAnonymousAuth(targetApp?: any) {
+function triggerAnonymousAuth() {
   const now = Date.now();
   if (now - lastAuthAttemptTime < AUTH_COOLDOWN_MS) return;
 
   try {
-    const auth = targetApp ? getAuth(targetApp) : getAuth();
+    const auth = getAuth();
     if (auth.currentUser) {
       isAuthenticated = true;
       return;
@@ -266,7 +252,22 @@ export function getActiveFirebaseConfig(): any {
       const stored = localStorage.getItem("active_firebase_config") || localStorage.getItem("logiroute_firebase_client_config");
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed && parsed.projectId) return parsed;
+        if (parsed && parsed.projectId) {
+          if (parsed.projectId === 'abastecimento-78ae9') {
+            localStorage.removeItem("active_firebase_config");
+            localStorage.removeItem("logiroute_firebase_client_config");
+            return firebaseConfig;
+          }
+          if (parsed.projectId === 'banco-02') {
+            const b2 = FIREBASE_PRESETS.find(p => p.id === 'banco-02');
+            if (b2) return b2.config;
+          }
+          if (parsed.projectId === 'banco-03') {
+            const b3 = FIREBASE_PRESETS.find(p => p.id === 'banco-03');
+            if (b3) return b3.config;
+          }
+          return parsed;
+        }
       }
     } catch (e) {}
   }
@@ -277,11 +278,7 @@ export async function switchActiveFirebaseConfig(newConfig: any): Promise<boolea
   try {
     hasClientPermissionError = false;
     isFirestoreQuotaExceeded = false;
-    lastSuccessfulSyncTime = 0;
     clientAuthError = null;
-    isAuthenticated = false;
-    isAuthenticating = false;
-
     if (typeof window !== "undefined") {
       localStorage.setItem("active_firebase_config", JSON.stringify(newConfig));
       localStorage.setItem("logiroute_firebase_client_config", JSON.stringify(newConfig));
@@ -319,40 +316,91 @@ export async function syncFirebaseData(sourceConfig: any, targetConfig: any): Pr
   let sourceApp: any = null;
   let targetApp: any = null;
 
-  try {
-    sourceApp = initializeApp(sourceConfig, appNameSource);
-    targetApp = initializeApp(targetConfig, appNameTarget);
+  const syncWorker = async () => {
+    try {
+      console.log(`[syncFirebaseData] Iniciando sincronização completa de '${sourceConfig.projectId}' para '${targetConfig.projectId}'...`);
+      sourceApp = initializeApp(sourceConfig, appNameSource);
+      targetApp = initializeApp(targetConfig, appNameTarget);
 
-    const sourceDb = getFirestore(sourceApp);
-    const targetDb = getFirestore(targetApp);
-
-    for (const colName of TRACKED_COLLECTIONS) {
       try {
-        const snap = await getDocs(collection(sourceDb, colName));
-        if (snap.empty) continue;
-
-        const docs = snap.docs;
-        for (let i = 0; i < docs.length; i += 300) {
-          const chunk = docs.slice(i, i + 300);
-          const batch = writeBatch(targetDb);
-          chunk.forEach((d) => {
-            batch.set(doc(targetDb, colName, d.id), d.data());
-          });
-          await batch.commit();
-        }
-        totalDocs += docs.length;
+        await Promise.all([
+          signInAnonymously(getAuth(sourceApp)).catch(() => null),
+          signInAnonymously(getAuth(targetApp)).catch(() => null)
+        ]);
       } catch (e) {
-        console.warn(`[syncFirebaseData] Aviso ao copiar coleção ${colName}:`, e);
+        // ignore auth error
       }
+
+      const sourceDb = getFirestore(sourceApp);
+      const targetDb = getFirestore(targetApp);
+
+      for (const colName of TRACKED_COLLECTIONS) {
+        try {
+          const sourceSnap = await getDocs(collection(sourceDb, colName));
+          const sourceDocs = sourceSnap.docs;
+          const sourceDocIds = new Set(sourceDocs.map(d => d.id));
+
+          // Obtain target docs to identify stale items to purge
+          let idsToDelete: string[] = [];
+          try {
+            const targetSnap = await getDocs(collection(targetDb, colName));
+            for (const tDoc of targetSnap.docs) {
+              if (!sourceDocIds.has(tDoc.id)) {
+                idsToDelete.push(tDoc.id);
+              }
+            }
+          } catch (e) {
+            console.warn(`[syncFirebaseData] Não foi possível listar target para ${colName}:`, e);
+          }
+
+          if (sourceDocs.length === 0 && idsToDelete.length === 0) continue;
+
+          // Prepare operations: delete stale target docs first, then set current source docs
+          const ops: Array<{ type: 'set' | 'delete'; id: string; data?: any }> = [
+            ...idsToDelete.map(id => ({ type: 'delete' as const, id })),
+            ...sourceDocs.map(d => ({ type: 'set' as const, id: d.id, data: d.data() }))
+          ];
+
+          const batchSize = 300;
+          for (let i = 0; i < ops.length; i += batchSize) {
+            const chunk = ops.slice(i, i + batchSize);
+            const batch = writeBatch(targetDb);
+            chunk.forEach(op => {
+              const docRef = doc(targetDb, colName, op.id);
+              if (op.type === 'delete') {
+                batch.delete(docRef);
+              } else {
+                batch.set(docRef, op.data, { merge: true });
+              }
+            });
+            await batch.commit();
+          }
+
+          console.log(`[syncFirebaseData] Coleção '${colName}': ${sourceDocs.length} atualizados, ${idsToDelete.length} obsoletos removidos.`);
+          totalDocs += sourceDocs.length;
+        } catch (e) {
+          console.warn(`[syncFirebaseData] Aviso ao sincronizar coleção '${colName}':`, e);
+        }
+      }
+      console.log(`[syncFirebaseData] Sincronização concluída! Total de ${totalDocs} documentos transferidos.`);
+      return { success: true, count: totalDocs };
+    } catch (err) {
+      console.error("[syncFirebaseData] Erro de sincronização entre bancos:", err);
+      return { success: false, count: 0 };
+    } finally {
+      if (sourceApp) { try { await deleteApp(sourceApp); } catch (e) {} }
+      if (targetApp) { try { await deleteApp(targetApp); } catch (e) {} }
     }
-    return { success: true, count: totalDocs };
-  } catch (err) {
-    console.error("[syncFirebaseData] Erro de sincronização entre bancos:", err);
-    throw err;
-  } finally {
-    if (sourceApp) { try { await deleteApp(sourceApp); } catch (e) {} }
-    if (targetApp) { try { await deleteApp(targetApp); } catch (e) {} }
-  }
+  };
+
+  const timeoutPromise = new Promise<{ success: boolean; count: number }>((resolve) => {
+    setTimeout(() => {
+      console.warn("[syncFirebaseData] Timeout de 25s atingido. Prosseguindo com troca de banco...");
+      resolve({ success: false, count: totalDocs });
+    }, 25000);
+  });
+
+  return Promise.race([syncWorker(), timeoutPromise]);
 }
 
 export function getClientFirestore() {
@@ -375,25 +423,10 @@ export function getClientFirestore() {
       return null;
     }
 
-    let app: any;
-    const existingApps = getApps();
-    const activeAppName = `app_${config.projectId}`;
-
-    const defaultApp = existingApps.find(a => a.name === "[DEFAULT]");
-    if (defaultApp && defaultApp.options.projectId === config.projectId) {
-      app = defaultApp;
-    } else {
-      const existingNamedApp = existingApps.find(a => a.name === activeAppName);
-      if (existingNamedApp) {
-        app = existingNamedApp;
-      } else {
-        app = initializeApp(config, activeAppName);
-      }
-    }
-
+    const app = getApps().length === 0 ? initializeApp(config) : getApp();
     const dbId = (config.firestoreDatabaseId && config.firestoreDatabaseId !== "(default)") ? config.firestoreDatabaseId : undefined;
     firestoreInstance = dbId ? getFirestore(app, dbId) : getFirestore(app);
-    triggerAnonymousAuth(app);
+    triggerAnonymousAuth();
     return firestoreInstance;
   } catch (err) {
     console.warn("[ClientFirebase] Erro ao inicializar Firestore:", err);
@@ -414,7 +447,6 @@ export async function saveDocToFirestore(colName: string, item: any): Promise<bo
     cleanItem.id = docId;
     const docRef = doc(db, targetCol, docId);
     await setDoc(docRef, cleanItem, { merge: true });
-    recordWrites(1);
     return true;
   } catch (err) {
     console.warn(`[ClientFirebase] Erro ao salvar documento na coleção '${colName}':`, err);
@@ -429,7 +461,6 @@ export async function deleteDocFromFirestore(colName: string, docId: string): Pr
     const targetCol = COLLECTION_MAP[colName] || colName;
     const docRef = doc(db, targetCol, docId);
     await deleteDoc(docRef);
-    recordDeletions(1);
     return true;
   } catch (err) {
     console.warn(`[ClientFirebase] Erro ao deletar documento '${docId}' da coleção '${colName}':`, err);
@@ -476,10 +507,6 @@ export async function saveDocsToFirestore(colName: string, items: any[], syncDel
         }
       });
       await batch.commit();
-      const setOpsCount = chunk.filter(o => o.type === 'set').length;
-      const delOpsCount = chunk.filter(o => o.type === 'delete').length;
-      if (setOpsCount > 0) recordWrites(setOpsCount);
-      if (delOpsCount > 0) recordDeletions(delOpsCount);
     }
     return true;
   } catch (err) {
@@ -549,7 +576,6 @@ export function subscribeToFirestore(onUpdate: (db: any) => void): () => void {
       if (colName === "customManual") {
         const docRef = doc(db, "customManual", "main");
         const unsub = onSnapshot(docRef, (docSnap) => {
-          recordReads(1);
           lastSuccessfulSyncTime = Date.now();
           if (typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent('firestore_synced', { detail: { time: lastSuccessfulSyncTime } }));
@@ -566,8 +592,6 @@ export function subscribeToFirestore(onUpdate: (db: any) => void): () => void {
       } else {
         const collRef = collection(db, colName);
         const unsub = onSnapshot(collRef, (snapshot) => {
-          const readsCount = snapshot.docChanges().length || snapshot.docs.length || 1;
-          recordReads(readsCount);
           lastSuccessfulSyncTime = Date.now();
           if (typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent('firestore_synced', { detail: { time: lastSuccessfulSyncTime } }));
@@ -652,7 +676,6 @@ export async function fetchDirectlyFromFirestore(): Promise<any> {
         if (colName === "customManual") {
           const docRef = doc(db, "customManual", "main");
           const snap = await getDoc(docRef);
-          recordReads(1);
           if (snap.exists()) {
             const data = snap.data();
             combinedDb.customManual = data.html || data.content || "";
@@ -660,7 +683,6 @@ export async function fetchDirectlyFromFirestore(): Promise<any> {
         } else {
           const collRef = collection(db, colName);
           const snap = await getDocs(collRef);
-          recordReads(snap.docs.length || 1);
           const items = snap.docs.map((d) => ({
             ...d.data(),
             id: d.id
@@ -711,71 +733,4 @@ export async function saveGeminiKeyToFirestore(apiKey: string): Promise<boolean>
     return true;
   } catch (e) {}
   return false;
-}
-
-export async function consolidateAllDataToTargetDatabase(targetConfig: any): Promise<{ success: boolean; totalSynced: number; details: string[] }> {
-  const details: string[] = [];
-  let totalSynced = 0;
-
-  // 1. Sync from other preset databases (e.g. Banco 01 -> Banco 02 or vice-versa)
-  for (const preset of FIREBASE_PRESETS) {
-    if (preset.config && preset.config.projectId && preset.config.projectId !== targetConfig.projectId) {
-      try {
-        const res = await syncFirebaseData(preset.config, targetConfig);
-        if (res.count > 0) {
-          totalSynced += res.count;
-          details.push(`${res.count} documentos migrados/copiados do banco '${preset.name}'`);
-        }
-      } catch (e: any) {
-        console.warn(`Falha ao consolidar de ${preset.id}:`, e);
-      }
-    }
-  }
-
-  // 2. Sync from local platform database server endpoint if available
-  try {
-    const res = await fetch('/api/database');
-    if (res.ok) {
-      const dbData = await res.json();
-      const appNameTgt = `consolidateTgt_${Date.now()}`;
-      const app = initializeApp(targetConfig, appNameTgt);
-      const db = getFirestore(app);
-
-      for (const key of Object.keys(dbData)) {
-        const colName = COLLECTION_MAP[key] || key;
-        const val = dbData[key];
-        if (colName === "customManual") {
-          const docRef = doc(db, "customManual", "main");
-          const htmlContent = typeof val === "string" ? val : val?.html || val?.content || "";
-          if (htmlContent) {
-            await setDoc(docRef, { html: htmlContent, updatedAt: new Date().toISOString() });
-          }
-        } else if (Array.isArray(val) && val.length > 0) {
-          const cleanItems = JSON.parse(JSON.stringify(val));
-          for (let i = 0; i < cleanItems.length; i += 300) {
-            const chunk = cleanItems.slice(i, i + 300);
-            const batch = writeBatch(db);
-            chunk.forEach((item: any) => {
-              const docId = getDocIdForCollection(colName, item);
-              item.id = docId;
-              batch.set(doc(db, colName, docId), item, { merge: true });
-            });
-            await batch.commit();
-          }
-          totalSynced += cleanItems.length;
-        }
-      }
-      details.push(`Registrados dados locais da plataforma com sucesso.`);
-      try {
-        await deleteApp(app);
-      } catch (e) {}
-    }
-  } catch (e: any) {
-    console.warn("Erro ao ler /api/database para consolidação:", e);
-  }
-
-  // Set active config to targetConfig
-  await switchActiveFirebaseConfig(targetConfig);
-
-  return { success: true, totalSynced, details };
 }

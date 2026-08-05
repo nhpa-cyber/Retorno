@@ -57,7 +57,7 @@ export default function PlatformManual({ customManualHTML = '' }: PlatformManual
 
   return (
     <div className="bg-slate-900 border-t border-slate-800 text-white" id="platform_manual_container">
-      <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+      <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
         
         {/* Accordion Toggle Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
