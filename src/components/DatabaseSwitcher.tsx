@@ -634,7 +634,7 @@ export const DatabaseSwitcher: React.FC<DatabaseSwitcherProps> = ({ onSwitchComp
                 className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 border border-slate-700 transition cursor-pointer"
               >
                 <RotateCcw className="h-3.5 w-3.5 text-slate-400" />
-                <span>Restaurar Padrão (07h, 17h, 20h)</span>
+                <span>Restaurar Padrão (07h, 13:50, 20h)</span>
               </button>
 
               <button

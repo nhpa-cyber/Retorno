@@ -23,18 +23,18 @@ export const DEFAULT_SCHEDULE_RULES: ScheduleRule[] = [
     triggerHour: 7,
     triggerMinute: 0,
     timeLabel: "07:00",
-    description: "Turno Diurno (07:00 às 17:00) ➔ Banco 01"
+    description: "Turno Diurno (07:00 às 13:50) ➔ Banco 01"
   },
   {
     id: "vespertino_banco_02",
     presetId: "banco-02",
     name: "Banco 02 (Vespertino)",
-    badge: "17:00 - Banco 02",
+    badge: "13:50 - Banco 02",
     badgeColor: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
-    triggerHour: 17,
-    triggerMinute: 0,
-    timeLabel: "17:00",
-    description: "Turno Vespertino (17:00 às 20:00) ➔ Banco 02"
+    triggerHour: 13,
+    triggerMinute: 50,
+    timeLabel: "13:50",
+    description: "Turno Vespertino (13:50 às 20:00) ➔ Banco 02"
   },
   {
     id: "noturno_banco_03",
@@ -67,8 +67,34 @@ export function getScheduleRules(): ScheduleRule[] {
   try {
     const stored = localStorage.getItem('db_custom_schedule_rules');
     if (stored) {
-      const parsed = JSON.parse(stored);
+      let parsed = JSON.parse(stored);
       if (Array.isArray(parsed) && parsed.length > 0) {
+        let updated = false;
+        parsed = parsed.map((r: ScheduleRule) => {
+          if (r.id === 'vespertino_banco_02' && r.triggerHour === 17 && r.triggerMinute === 0) {
+            updated = true;
+            return {
+              ...r,
+              triggerHour: 13,
+              triggerMinute: 50,
+              timeLabel: "13:50",
+              badge: "13:50 - BANCO-02",
+              description: "Turno Vespertino (13:50 às 20:00) ➔ Banco 02"
+            };
+          }
+          if (r.id === 'diurno_banco_01' && r.description && r.description.includes('17:00')) {
+            updated = true;
+            return {
+              ...r,
+              description: r.description.replace('17:00', '13:50')
+            };
+          }
+          return r;
+        });
+        if (updated) {
+          localStorage.setItem('db_custom_schedule_rules', JSON.stringify(parsed));
+          publishSystemControlUpdate({ scheduleRules: parsed }).catch(() => {});
+        }
         return parsed;
       }
     }
