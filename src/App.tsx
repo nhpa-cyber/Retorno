@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { User, Driver, Vehicle, Product, ActiveAsset, AuditSession, ReturnForecast, FiscalAlert, ImportedRoute, Vale } from './types';
 import { DEFAULT_PRODUCTS, DEFAULT_USERS } from './data';
 import { ImageDB } from './imageDb';
-import { isClientFirebaseActive, fetchDirectlyFromFirestore, saveDirectlyToFirestore, subscribeToFirestore, getClientAuthError, getIsFirestoreQuotaExceeded, setFirestoreQuotaExceeded, getActiveFirebaseConfig, switchActiveFirebaseConfig, checkAndSyncServerConfig } from './clientFirebase';
+import { isClientFirebaseActive, fetchDirectlyFromFirestore, saveDirectlyToFirestore, subscribeToFirestore, getClientAuthError, getIsFirestoreQuotaExceeded, setFirestoreQuotaExceeded, getActiveFirebaseConfig, switchActiveFirebaseConfig, checkAndSyncServerConfig, subscribeToSystemControl } from './clientFirebase';
 import Header from './components/Header';
 import ConferenteView from './components/ConferenteView';
 import FiscalView from './components/FiscalView';
@@ -524,107 +524,33 @@ export default function App() {
     }
   }, [clientPermissionDenied]);
 
-  // 4b. Setup global server events (DB switch countdowns, config changes, schedule rules) via SSE and periodic sync
+  // 4b. Listen to global control state (app_control/active_database) in real-time from app boot via Firestore onSnapshot
   useEffect(() => {
-    let eventSource: EventSource | null = null;
-    let reconnectTimeout: any = null;
+    const unsubscribeControl = subscribeToSystemControl((data) => {
+      if (data.activeConfig && data.activeConfig.projectId) {
+        const currentLocal = getActiveFirebaseConfig();
+        if (currentLocal?.projectId !== data.activeConfig.projectId) {
+          console.log(`[App] Canal de Controle Firestore notificou troca para ${data.activeConfig.projectId}. Atualizando dispositivo...`);
+          switchActiveFirebaseConfig(data.activeConfig, false, false).then(() => {
+            window.dispatchEvent(new CustomEvent('server_config_updated', { detail: data.activeConfig }));
+            window.location.reload();
+          });
+        }
+      }
 
-    // Synchronize initial configuration from server (crucial for incognito mode and collaborators)
-    checkAndSyncServerConfig().then((res) => {
-      if (res.changed && res.config && res.config.projectId) {
-        console.log("[App] Configuração do servidor diferente da local. Atualizando banco e recarregando...");
-        window.dispatchEvent(new CustomEvent('server_config_updated', { detail: res.config }));
-        window.location.reload();
+      const pending = data.pendingSwitch !== undefined ? data.pendingSwitch : data.pendingDbSwitch;
+      window.dispatchEvent(new CustomEvent('server_pending_switch_updated', { detail: pending }));
+
+      if (data.scheduleRules && Array.isArray(data.scheduleRules)) {
+        localStorage.setItem('db_custom_schedule_rules', JSON.stringify(data.scheduleRules));
+        window.dispatchEvent(new CustomEvent('server_schedule_rules_updated', { detail: data.scheduleRules }));
       }
     });
 
-    // Periodic polling backup (every 2 seconds) to guarantee sync across incognito tabs, devices & collaborators
-    const syncInterval = setInterval(async () => {
-      try {
-        const res = await checkAndSyncServerConfig();
-        if (res.changed && res.config && res.config.projectId) {
-          console.log(`[SyncInterval] Servidor trocou banco de dados para ${res.config.projectId}. Recarregando aplicação...`);
-          window.dispatchEvent(new CustomEvent('server_config_updated', { detail: res.config }));
-          window.location.reload();
-        }
-      } catch (e) {}
-    }, 2000);
-
-    const connectSSE = () => {
-      console.log("Conectando ao canal de sincronização de eventos do servidor (SSE)...");
-      eventSource = new EventSource('/api/db/events');
-
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          if (data) {
-            // Handle pending DB switch broadcast
-            if (data.pendingDbSwitch !== undefined) {
-              window.dispatchEvent(new CustomEvent('server_pending_switch_updated', { detail: data.pendingDbSwitch }));
-            }
-
-            // Handle config update broadcast across all connected devices
-            if (data.config && data.config.projectId) {
-              const currentLocal = getActiveFirebaseConfig();
-              if (currentLocal?.projectId !== data.config.projectId) {
-                console.log(`[SSE] Servidor informou troca de banco de dados para ${data.config.projectId}. Recarregando...`);
-                switchActiveFirebaseConfig(data.config, false).then(() => {
-                  window.dispatchEvent(new CustomEvent('server_config_updated', { detail: data.config }));
-                  window.location.reload();
-                });
-              }
-            }
-
-            // Handle custom schedule rules broadcast
-            if (data.scheduleRules) {
-              window.dispatchEvent(new CustomEvent('server_schedule_rules_updated', { detail: data.scheduleRules }));
-            }
-
-            // Only apply direct JSON DB updates from SSE if client Firebase is NOT active
-            if (data.db && (!isClientFirebaseActive() || clientPermissionDenied)) {
-              const db = data.db;
-              
-              if (db.photos) {
-                ImageDB.syncPhotos(db.photos).catch(e => console.error("Error syncing photos from SSE:", e));
-              }
-
-              // Skip applying updates if there was a recent local write on this client to avoid race conditions
-              if (Date.now() - lastWriteTime.current < 1500) {
-                return;
-              }
-
-              applyDirectDb(db);
-            }
-          }
-        } catch (err) {
-          console.error("Error parsing real-time database event:", err);
-        }
-      };
-
-      eventSource.onerror = (err) => {
-        console.log("Canal de sincronização SSE em modo de espera ou reconectando. Tentando reconexão automática em 3s...");
-        if (eventSource) {
-          eventSource.close();
-        }
-        reconnectTimeout = setTimeout(() => {
-          connectSSE();
-        }, 3000);
-      };
-    };
-
-    connectSSE();
-
     return () => {
-      clearInterval(syncInterval);
-      if (eventSource) {
-        eventSource.close();
-      }
-      if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout);
-      }
+      unsubscribeControl();
     };
-  }, [clientPermissionDenied]);
+  }, []);
 
   // Real-time synchronization across tabs of the SAME browser
   useEffect(() => {

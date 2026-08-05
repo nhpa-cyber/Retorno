@@ -1,4 +1,5 @@
 import { FIREBASE_PRESETS, FirebasePreset } from '../firebasePresets';
+import { publishSystemControlUpdate } from '../clientFirebase';
 
 export interface ScheduleRule {
   id: string;
@@ -96,6 +97,9 @@ export async function saveScheduleRules(rules: ScheduleRule[]): Promise<void> {
     localStorage.setItem('db_custom_schedule_rules', JSON.stringify(formattedRules));
     window.dispatchEvent(new CustomEvent('db_schedule_rules_changed', { detail: formattedRules }));
   }
+
+  // Publish to Control Channel Firestore for static deployment (GitHub Pages)
+  await publishSystemControlUpdate({ scheduleRules: formattedRules });
 
   try {
     await fetch('/api/firebase/schedule-rules', {
@@ -262,25 +266,43 @@ export async function triggerGlobalDatabaseSwitch(
     const nextPreset = FIREBASE_PRESETS.find(p => p.id === targetPresetId || p.config.projectId === targetPresetId) || FIREBASE_PRESETS[nextIndex] || FIREBASE_PRESETS[0];
 
     const requesterText = requestedBy || 'Gestor Administrador';
+    const switchAtTimestamp = Date.now() + seconds * 1000;
 
-    // Trigger on server so all PCs and Mobiles receive it via SSE/polling
-    await fetch('/api/firebase/trigger-switch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        targetPresetId: nextPreset.id,
+    // Publish to Control Channel Firestore for 100% real-time sync across static hosting (GitHub Pages)
+    await publishSystemControlUpdate({
+      pendingSwitch: {
+        targetProjectId: nextPreset.config.projectId,
+        switchAtTimestamp,
+        requestedBy: requesterText,
         targetConfig: nextPreset.config,
         targetName: nextPreset.name,
         countdownSeconds: seconds,
-        requestedBy: requesterText,
         requestedType
-      })
+      }
     });
+
+    // Also send to server endpoint if Express is running
+    try {
+      await fetch('/api/firebase/trigger-switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetPresetId: nextPreset.id,
+          targetConfig: nextPreset.config,
+          targetName: nextPreset.name,
+          countdownSeconds: seconds,
+          switchAtTimestamp,
+          requestedBy: requesterText,
+          requestedType
+        })
+      });
+    } catch (e) {}
 
     // Also dispatch local event for instant UI reaction
     window.dispatchEvent(new CustomEvent('trigger_db_simulated_countdown', {
       detail: {
         seconds,
+        switchAtTimestamp,
         targetPreset: nextPreset,
         requestedBy: requesterText,
         requestedType
@@ -289,4 +311,13 @@ export async function triggerGlobalDatabaseSwitch(
   } catch (err) {
     console.error('Error triggering global db switch:', err);
   }
+}
+
+export async function cancelGlobalDatabaseSwitch() {
+  try {
+    await publishSystemControlUpdate({ pendingSwitch: null, pendingDbSwitch: null });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cancel_db_countdown'));
+    }
+  } catch (e) {}
 }

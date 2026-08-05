@@ -242,6 +242,170 @@ function triggerAnonymousAuth() {
   }
 }
 
+// Fixed control configuration (banco-01-34be4 is our permanent static control database channel)
+export const CONTROL_FIREBASE_CONFIG = FIREBASE_PRESETS[0].config;
+
+let controlAppInstance: any = null;
+let controlFirestoreInstance: any = null;
+
+export function getControlFirestore() {
+  if (!controlFirestoreInstance) {
+    try {
+      const apps = getApps();
+      const existingApp = apps.find(a => a.name === "ControlChannelApp");
+      if (existingApp) {
+        controlAppInstance = existingApp;
+      } else {
+        controlAppInstance = initializeApp(CONTROL_FIREBASE_CONFIG, "ControlChannelApp");
+      }
+      controlFirestoreInstance = getFirestore(controlAppInstance);
+    } catch (e) {
+      console.warn("[ControlChannel] Erro ao obter Firestore de controle, usando fallback:", e);
+      controlFirestoreInstance = firestoreInstance || getClientFirestore();
+    }
+  }
+  return controlFirestoreInstance;
+}
+
+export interface SystemControlData {
+  activeProjectId?: string;
+  changedBy?: string;
+  changedAt?: string;
+  pendingSwitch?: {
+    targetProjectId: string;
+    switchAtTimestamp: number;
+    requestedBy?: string;
+    targetConfig?: any;
+    targetName?: string;
+    countdownSeconds?: number;
+    requestedType?: 'manual' | 'auto';
+  } | null;
+  activePresetId?: string;
+  activeConfig?: any;
+  pendingDbSwitch?: any;
+  scheduleRules?: any[];
+  updatedAt?: number;
+  updatedBy?: string;
+}
+
+export async function publishSystemControlUpdate(updateData: Partial<SystemControlData>): Promise<boolean> {
+  try {
+    const db = getControlFirestore();
+    if (db) {
+      const ref = doc(db, "app_control", "active_database");
+      
+      const payload: any = {};
+
+      if (updateData.activeProjectId || updateData.activeConfig || updateData.activePresetId) {
+        const projId = updateData.activeProjectId || updateData.activePresetId || updateData.activeConfig?.projectId;
+        const matchedPreset = FIREBASE_PRESETS.find(p => p.config.projectId === projId || p.id === projId);
+        payload.activeProjectId = matchedPreset ? matchedPreset.config.projectId : projId;
+        payload.changedBy = updateData.changedBy || updateData.updatedBy || "Gestor Administrador (g1009)";
+        payload.changedAt = updateData.changedAt || new Date().toISOString();
+        if (matchedPreset) {
+          payload.activeConfig = matchedPreset.config;
+          payload.activePresetId = matchedPreset.id;
+        } else if (updateData.activeConfig) {
+          payload.activeConfig = updateData.activeConfig;
+        }
+      }
+
+      if (updateData.pendingSwitch !== undefined || updateData.pendingDbSwitch !== undefined) {
+        const ps = updateData.pendingSwitch !== undefined ? updateData.pendingSwitch : updateData.pendingDbSwitch;
+        if (!ps) {
+          payload.pendingSwitch = null;
+          payload.pendingDbSwitch = null;
+        } else {
+          const targetProjId = ps.targetProjectId || ps.targetPresetId || ps.targetConfig?.projectId;
+          const matchedTarget = FIREBASE_PRESETS.find(p => p.config.projectId === targetProjId || p.id === targetProjId);
+          const fullPending = {
+            targetProjectId: matchedTarget ? matchedTarget.config.projectId : targetProjId,
+            switchAtTimestamp: ps.switchAtTimestamp,
+            requestedBy: ps.requestedBy || "Gestor Administrador (g1009)",
+            targetConfig: ps.targetConfig || (matchedTarget ? matchedTarget.config : null),
+            targetName: ps.targetName || (matchedTarget ? matchedTarget.name : targetProjId)
+          };
+          payload.pendingSwitch = fullPending;
+          payload.pendingDbSwitch = fullPending;
+        }
+      }
+
+      if (updateData.scheduleRules !== undefined) {
+        payload.scheduleRules = updateData.scheduleRules;
+      }
+
+      await setDoc(ref, payload, { merge: true });
+      console.log("[ControlChannel] app_control/active_database atualizado com sucesso no Firestore!");
+    }
+  } catch (err) {
+    console.warn("[ControlChannel] Erro ao publicar no Firestore app_control/active_database:", err);
+  }
+
+  if (updateData.activeConfig) {
+    try {
+      await fetch('/api/firebase/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData.activeConfig)
+      });
+    } catch (e) {}
+  }
+
+  return true;
+}
+
+export function subscribeToSystemControl(callback: (data: SystemControlData) => void): () => void {
+  try {
+    const db = getControlFirestore();
+    if (!db) return () => {};
+
+    const ref = doc(db, "app_control", "active_database");
+    const unsubscribe = onSnapshot(ref, (snapshot) => {
+      if (snapshot.exists()) {
+        const raw = snapshot.data();
+        
+        const activeProj = raw.activeProjectId || raw.activePresetId || raw.activeConfig?.projectId;
+        const matchedPreset = FIREBASE_PRESETS.find(p => p.config.projectId === activeProj || p.id === activeProj);
+        const resolvedConfig = matchedPreset ? matchedPreset.config : raw.activeConfig;
+
+        const ps = raw.pendingSwitch !== undefined ? raw.pendingSwitch : raw.pendingDbSwitch;
+        let resolvedPending = null;
+        if (ps) {
+          const targetProj = ps.targetProjectId || ps.targetPresetId || ps.targetConfig?.projectId;
+          const matchedTarget = FIREBASE_PRESETS.find(p => p.config.projectId === targetProj || p.id === targetProj);
+          resolvedPending = {
+            targetProjectId: matchedTarget ? matchedTarget.config.projectId : targetProj,
+            switchAtTimestamp: ps.switchAtTimestamp,
+            requestedBy: ps.requestedBy || 'Gestor Administrador',
+            targetConfig: ps.targetConfig || (matchedTarget ? matchedTarget.config : null),
+            targetName: ps.targetName || (matchedTarget ? matchedTarget.name : targetProj)
+          };
+        }
+
+        const normalizedData: SystemControlData = {
+          activeProjectId: activeProj,
+          changedBy: raw.changedBy || raw.updatedBy,
+          changedAt: raw.changedAt,
+          pendingSwitch: resolvedPending,
+          activePresetId: matchedPreset?.id || activeProj,
+          activeConfig: resolvedConfig,
+          pendingDbSwitch: resolvedPending,
+          scheduleRules: raw.scheduleRules
+        };
+
+        console.log("[ControlChannel] Estado app_control/active_database recebido em tempo real:", normalizedData);
+        callback(normalizedData);
+      }
+    }, (err) => {
+      console.warn("[ControlChannel] Erro no listener em tempo real:", err);
+    });
+    return unsubscribe;
+  } catch (e) {
+    console.warn("[ControlChannel] Falha ao assinar canal de controle:", e);
+    return () => {};
+  }
+}
+
 export function isClientFirebaseActive(): boolean {
   if (typeof window === "undefined" || hasClientPermissionError) return false;
   try {
@@ -283,7 +447,11 @@ export function getActiveFirebaseConfig(): any {
   return firebaseConfig;
 }
 
-export async function switchActiveFirebaseConfig(newConfig: any, updateServer: boolean = true): Promise<boolean> {
+export async function switchActiveFirebaseConfig(
+  newConfig: any,
+  updateServer: boolean = true,
+  publishToControlChannel: boolean = true
+): Promise<boolean> {
   try {
     hasClientPermissionError = false;
     isFirestoreQuotaExceeded = false;
@@ -307,6 +475,15 @@ export async function switchActiveFirebaseConfig(newConfig: any, updateServer: b
       } catch (e) {
         console.warn("[ClientFirebase] localStorage restrito. Usando memória.", e);
       }
+    }
+
+    if (publishToControlChannel && normalizedConfig && normalizedConfig.projectId) {
+      const presetMatch = FIREBASE_PRESETS.find(p => p.config.projectId === normalizedConfig.projectId || p.id === normalizedConfig.projectId);
+      publishSystemControlUpdate({
+        activePresetId: presetMatch ? presetMatch.id : normalizedConfig.projectId,
+        activeConfig: normalizedConfig,
+        pendingDbSwitch: null
+      });
     }
 
     if (updateServer) {

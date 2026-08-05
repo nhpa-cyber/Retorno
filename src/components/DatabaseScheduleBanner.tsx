@@ -192,57 +192,6 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
   }, [simulationSeconds, pendingTarget, simulatedNextPreset]);
 
   useEffect(() => {
-    // Poll server active config and pending switch every 1.0s as fallback
-    const pollServerConfig = async () => {
-      try {
-        const res = await fetch('/api/firebase/config');
-        if (res.ok) {
-          const data = await res.json();
-
-          if (data.pendingSwitch && data.pendingSwitch.switchAtTimestamp) {
-            const remMs = data.pendingSwitch.switchAtTimestamp - Date.now();
-            if (remMs > 0) {
-              const remSecs = Math.max(1, Math.ceil(remMs / 1000));
-              setSimulationSeconds(remSecs);
-              if (data.pendingSwitch.requestedBy) {
-                setSwitchRequester(data.pendingSwitch.requestedBy);
-              }
-              if (data.pendingSwitch.requestedType) {
-                setSwitchType(data.pendingSwitch.requestedType);
-              }
-              if (data.pendingSwitch.targetConfig) {
-                setPendingTarget({
-                  config: data.pendingSwitch.targetConfig,
-                  name: data.pendingSwitch.targetName || 'Novo Banco'
-                });
-              }
-            } else if (!isSwitchingRef.current) {
-              setSimulationSeconds(null);
-              const targetConfig = data.pendingSwitch.targetConfig || simulatedNextPreset.config;
-              const targetName = data.pendingSwitch.targetName || simulatedNextPreset.name;
-              performSwitch(targetConfig, targetName);
-            }
-          } else {
-            // No pending switch active on server
-            setSimulationSeconds(null);
-            setPendingTarget(null);
-          }
-
-          if (data.success && data.config && data.config.projectId) {
-            const currentLocalConfig = getActiveFirebaseConfig();
-            if (currentLocalConfig?.projectId !== data.config.projectId && !isSwitchingRef.current) {
-              console.log(`[DatabaseScheduler] Servidor trocou para ${data.config.projectId}. Atualizando dispositivo...`);
-              await switchActiveFirebaseConfig(data.config, false);
-              window.location.reload();
-            }
-          }
-        }
-      } catch (e) {}
-    };
-
-    pollServerConfig();
-    const pollTimer = setInterval(pollServerConfig, 1000);
-
     const checkSchedule = () => {
       const enabled = isAutoScheduleEnabled();
       setAutoEnabled(enabled);
@@ -283,7 +232,6 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
 
     return () => {
       clearInterval(timer);
-      clearInterval(pollTimer);
       window.removeEventListener('db_schedule_setting_changed', handleSettingChange);
       window.removeEventListener('db_schedule_rules_changed', handleRulesChange);
       window.removeEventListener('server_schedule_rules_updated', handleRulesChange);

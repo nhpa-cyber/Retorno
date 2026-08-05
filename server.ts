@@ -4,6 +4,14 @@ import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 
+/**
+ * SERVER NOTE:
+ * Em ambientes de hospedagem estática (como GitHub Pages), este servidor Express não roda.
+ * A fonte de verdade para alternância global e tempo real de bancos de dados é o Firestore 
+ * de controle global (documento: `app_control/active_database`).
+ * Este servidor local serve para testes dev com suporte a APIs locais.
+ */
+
 const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), 'database.json');
 
