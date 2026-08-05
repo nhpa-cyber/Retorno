@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Clock, AlertTriangle, ArrowRight, RefreshCw, CheckCircle2, ShieldAlert, Sparkles, Volume2 } from 'lucide-react';
+import { Clock, AlertTriangle, ArrowRight, RefreshCw, CheckCircle2, ShieldAlert, Sparkles, Volume2, Database, ShieldCheck } from 'lucide-react';
 import { getUpcomingDatabaseSwitchInfo, isAutoScheduleEnabled, UpcomingSwitchInfo, triggerGlobalDatabaseSwitch } from '../utils/databaseScheduler';
 import { getActiveFirebaseConfig, switchActiveFirebaseConfig, syncFirebaseData } from '../clientFirebase';
 import { FIREBASE_PRESETS } from '../firebasePresets';
@@ -21,6 +21,16 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
   const [simulationSeconds, setSimulationSeconds] = useState<number | null>(null);
   const [switchRequester, setSwitchRequester] = useState<string | null>(null);
   const [switchType, setSwitchType] = useState<'manual' | 'auto'>('manual');
+  
+  // Modal Popup state shown to ALL users when switch completes
+  const [switchedModalData, setSwitchedModalData] = useState<{
+    name: string;
+    projectId: string;
+    requestedBy: string;
+    targetConfig: any;
+    countdown: number;
+  } | null>(null);
+
   const isSwitchingRef = useRef<boolean>(false);
   const lastWarnedLevel = useRef<string>('none');
 
@@ -42,23 +52,51 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
       
       const success = await switchActiveFirebaseConfig(targetPresetConfig);
       if (success) {
-        setCompletedMessage(`Troca de Banco de Dados Concluída! Conectado ao ${targetName} (${targetPresetConfig.projectId}).`);
         if (onDatabaseSwitched) onDatabaseSwitched();
 
-        setTimeout(() => {
-          setCompletedMessage(null);
-          window.location.reload();
-        }, 1200);
+        const reqText = switchRequester || (currentUser ? `${currentUser.name || 'Gestor'} (${currentUser.username || 'g1009'})` : 'Gestor Administrador G1009 (g1009)');
+
+        // Open Modal Popup overlay for all connected users
+        setSwitchedModalData({
+          name: targetName,
+          projectId: targetPresetConfig.projectId,
+          requestedBy: reqText,
+          targetConfig: targetPresetConfig,
+          countdown: 4
+        });
       }
     } catch (err) {
       console.error("[DatabaseScheduler] Falha na troca de banco:", err);
+      isSwitchingRef.current = false;
     } finally {
       setIsSyncing(false);
-      isSwitchingRef.current = false;
     }
   };
 
   const [pendingTarget, setPendingTarget] = useState<{ config: any; name: string } | null>(null);
+
+  // Auto-countdown timer for popup modal
+  useEffect(() => {
+    if (!switchedModalData) return;
+
+    if (switchedModalData.countdown <= 0) {
+      window.location.reload();
+      return;
+    }
+
+    const modalInterval = setInterval(() => {
+      setSwitchedModalData(prev => {
+        if (!prev) return null;
+        if (prev.countdown <= 1) {
+          window.location.reload();
+          return null;
+        }
+        return { ...prev, countdown: prev.countdown - 1 };
+      });
+    }, 1000);
+
+    return () => clearInterval(modalInterval);
+  }, [switchedModalData]);
 
   // SSE & Custom Event listeners for instant switch updates across all devices
   useEffect(() => {
@@ -100,14 +138,39 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
       }
     };
 
+    const handleServerConfigUpdated = (e: any) => {
+      const newConfig = e.detail;
+      if (newConfig && newConfig.projectId) {
+        const currentLocalConfig = getActiveFirebaseConfig();
+        if (currentLocalConfig?.projectId !== newConfig.projectId && !isSwitchingRef.current) {
+          isSwitchingRef.current = true;
+          const matchedPreset = FIREBASE_PRESETS.find(p => p.config.projectId === newConfig.projectId);
+          const targetName = matchedPreset?.name || newConfig.projectId;
+          const reqText = switchRequester || 'Gestor Administrador G1009 (g1009)';
+
+          switchActiveFirebaseConfig(newConfig).then(() => {
+            setSwitchedModalData({
+              name: targetName,
+              projectId: newConfig.projectId,
+              requestedBy: reqText,
+              targetConfig: newConfig,
+              countdown: 4
+            });
+          });
+        }
+      }
+    };
+
     window.addEventListener('trigger_db_simulated_countdown', handleSimulateEvent);
     window.addEventListener('server_pending_switch_updated', handleServerPendingSwitch);
+    window.addEventListener('server_config_updated', handleServerConfigUpdated);
 
     return () => {
       window.removeEventListener('trigger_db_simulated_countdown', handleSimulateEvent);
       window.removeEventListener('server_pending_switch_updated', handleServerPendingSwitch);
+      window.removeEventListener('server_config_updated', handleServerConfigUpdated);
     };
-  }, []);
+  }, [switchRequester]);
 
   // Countdown timer for switch
   useEffect(() => {
@@ -260,8 +323,8 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
     nextTimeLabel = 'Agendamento em Andamento';
   }
 
-  // Don't render banner if no active server countdown and warning level is 'none'
-  if (!hasActiveServerCountdown && warningLevel === 'none') {
+  // Don't render banner if no active server countdown and warning level is 'none' and no modal popup active
+  if (!hasActiveServerCountdown && warningLevel === 'none' && !switchedModalData) {
     return null;
   }
 
@@ -394,6 +457,99 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
               <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>{isSyncing ? 'Sincronizando Base...' : 'Efetuar Troca Agora'}</span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP MODAL: Conectado ao Próximo Banco de Dados */}
+      {switchedModalData && (
+        <div className="fixed inset-0 z-[9999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in" id="db_switched_popup_modal">
+          <div className="bg-white dark:bg-slate-900 border-2 border-emerald-500 rounded-2xl shadow-2xl max-w-lg w-full p-6 text-slate-900 dark:text-white space-y-5 relative overflow-hidden">
+            {/* Top Glow Bar */}
+            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-600 animate-pulse" />
+
+            {/* Modal Header */}
+            <div className="flex items-start space-x-4 pt-1">
+              <div className="bg-emerald-500/15 border-2 border-emerald-500/40 p-3 rounded-2xl text-emerald-600 dark:text-emerald-400 shrink-0 shadow-lg animate-bounce">
+                <Database className="h-8 w-8" />
+              </div>
+              <div className="space-y-1 min-w-0">
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-700/60 inline-block">
+                  🚨 TROCA GLOBAL DE BANCO CONCLUÍDA
+                </span>
+                <h2 className="text-lg font-black text-slate-950 dark:text-white uppercase leading-snug">
+                  Alterando Para o Próximo Banco de Dados
+                </h2>
+              </div>
+            </div>
+
+            {/* Info Card */}
+            <div className="bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3 shadow-inner font-sans">
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Novo Banco Ativo:</span>
+                <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase bg-emerald-50 dark:bg-emerald-900/30 px-2.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+                  {switchedModalData.name}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium font-sans">Project ID (Firebase):</span>
+                <span className="text-xs font-mono font-bold text-slate-900 dark:text-slate-200">
+                  {switchedModalData.projectId}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium font-sans">Solicitado Por:</span>
+                <span className="text-xs font-bold text-amber-600 dark:text-amber-400 font-sans">
+                  {switchedModalData.requestedBy}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium font-sans">Sincronização da Plataforma:</span>
+                <span className="text-[11px] font-extrabold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-sans">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Replicado em Tempo Real
+                </span>
+              </div>
+            </div>
+
+            {/* Notice Message */}
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+              As credenciais do novo banco de dados foram alteradas com sucesso no servidor e replicadas em tempo real para <strong>todos os usuários da plataforma</strong>. A página será atualizada para carregar a nova conexão com o banco de dados.
+            </p>
+
+            {/* Countdown Progress & Action Button */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between text-xs font-mono font-bold text-slate-500 dark:text-slate-400">
+                <span className="flex items-center gap-1.5 font-sans">
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin text-emerald-500" />
+                  Recarregando aplicação em instantes...
+                </span>
+                <span className="bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded text-emerald-600 dark:text-emerald-400 font-black">
+                  {switchedModalData.countdown}s
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                <div 
+                  className="bg-emerald-500 h-2 rounded-full transition-all duration-1000 ease-linear"
+                  style={{ width: `${(switchedModalData.countdown / 4) * 100}%` }}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.reload();
+                }}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs py-3 px-4 rounded-xl shadow-lg transition-all transform active:scale-98 cursor-pointer flex items-center justify-center space-x-2"
+              >
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                <span>ENTENDIDO / RECARREGAR AGORA</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
