@@ -148,7 +148,7 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
           const targetName = matchedPreset?.name || newConfig.projectId;
           const reqText = switchRequester || 'Gestor Administrador G1009 (g1009)';
 
-          switchActiveFirebaseConfig(newConfig).then(() => {
+          switchActiveFirebaseConfig(newConfig, false).then(() => {
             setSwitchedModalData({
               name: targetName,
               projectId: newConfig.projectId,
@@ -232,7 +232,7 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
             const currentLocalConfig = getActiveFirebaseConfig();
             if (currentLocalConfig?.projectId !== data.config.projectId && !isSwitchingRef.current) {
               console.log(`[DatabaseScheduler] Servidor trocou para ${data.config.projectId}. Atualizando dispositivo...`);
-              await switchActiveFirebaseConfig(data.config);
+              await switchActiveFirebaseConfig(data.config, false);
               window.location.reload();
             }
           }

@@ -271,13 +271,9 @@ export function getActiveFirebaseConfig(): any {
             } catch (e) {}
             return firebaseConfig;
           }
-          if (parsed.projectId === 'banco-02') {
-            const b2 = FIREBASE_PRESETS.find(p => p.id === 'banco-02');
-            if (b2) return b2.config;
-          }
-          if (parsed.projectId === 'banco-03') {
-            const b3 = FIREBASE_PRESETS.find(p => p.id === 'banco-03');
-            if (b3) return b3.config;
+          const presetMatch = FIREBASE_PRESETS.find(p => p.id === parsed.projectId || p.config.projectId === parsed.projectId);
+          if (presetMatch) {
+            return presetMatch.config;
           }
           return parsed;
         }
@@ -292,22 +288,33 @@ export async function switchActiveFirebaseConfig(newConfig: any, updateServer: b
     hasClientPermissionError = false;
     isFirestoreQuotaExceeded = false;
     clientAuthError = null;
-    memoryActiveConfig = newConfig;
+
+    let normalizedConfig = newConfig;
+    if (typeof newConfig === 'string') {
+      const p = FIREBASE_PRESETS.find(pr => pr.id === newConfig || pr.config.projectId === newConfig);
+      if (p) normalizedConfig = p.config;
+    } else if (newConfig && newConfig.projectId) {
+      const p = FIREBASE_PRESETS.find(pr => pr.id === newConfig.projectId || pr.config.projectId === newConfig.projectId);
+      if (p) normalizedConfig = p.config;
+    }
+
+    memoryActiveConfig = normalizedConfig;
 
     if (typeof window !== "undefined") {
       try {
-        localStorage.setItem("active_firebase_config", JSON.stringify(newConfig));
-        localStorage.setItem("logiroute_firebase_client_config", JSON.stringify(newConfig));
+        localStorage.setItem("active_firebase_config", JSON.stringify(normalizedConfig));
+        localStorage.setItem("logiroute_firebase_client_config", JSON.stringify(normalizedConfig));
       } catch (e) {
-        console.warn("[ClientFirebase] localStorage restrito (guia anônima). Usando memória.", e);
+        console.warn("[ClientFirebase] localStorage restrito. Usando memória.", e);
       }
     }
+
     if (updateServer) {
       try {
         await fetch('/api/firebase/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newConfig),
+          body: JSON.stringify(normalizedConfig),
         });
       } catch (e) {}
     }
@@ -320,7 +327,7 @@ export async function switchActiveFirebaseConfig(newConfig: any, updateServer: b
     }
 
     if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("firebase_config_changed", { detail: newConfig }));
+      window.dispatchEvent(new CustomEvent("firebase_config_changed", { detail: normalizedConfig }));
     }
     return true;
   } catch (err) {

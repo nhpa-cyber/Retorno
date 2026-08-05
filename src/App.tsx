@@ -535,12 +535,12 @@ export default function App() {
         const currentConfig = getActiveFirebaseConfig();
         if (currentConfig?.projectId !== syncedConfig.projectId) {
           console.log("[App] Configuração do servidor diferente da local. Atualizando banco...");
-          window.location.reload();
+          window.dispatchEvent(new CustomEvent('server_config_updated', { detail: syncedConfig }));
         }
       }
     });
 
-    // Periodic polling backup (every 5 seconds) to guarantee sync across incognito tabs & collaborators
+    // Periodic polling backup (every 3 seconds) to guarantee sync across incognito tabs, devices & collaborators
     const syncInterval = setInterval(async () => {
       try {
         const currentLocal = getActiveFirebaseConfig();
@@ -549,12 +549,11 @@ export default function App() {
         if (data && data.success && data.config && data.config.projectId) {
           if (currentLocal?.projectId !== data.config.projectId) {
             console.log(`[SyncInterval] Servidor trocou banco de dados para ${data.config.projectId}. Atualizando localmente...`);
-            await switchActiveFirebaseConfig(data.config, false);
-            window.location.reload();
+            window.dispatchEvent(new CustomEvent('server_config_updated', { detail: data.config }));
           }
         }
       } catch (e) {}
-    }, 5000);
+    }, 3000);
 
     const connectSSE = () => {
       console.log("Conectando ao canal de sincronização de eventos do servidor (SSE)...");
@@ -573,13 +572,6 @@ export default function App() {
             // Handle config update broadcast across all connected devices
             if (data.config && data.config.projectId) {
               window.dispatchEvent(new CustomEvent('server_config_updated', { detail: data.config }));
-              const currentLocalConfig = getActiveFirebaseConfig();
-              if (currentLocalConfig?.projectId !== data.config.projectId) {
-                console.log(`[SSE] Servidor informou troca de banco para ${data.config.projectId}. Atualizando localmente...`);
-                switchActiveFirebaseConfig(data.config, false).then(() => {
-                  window.location.reload();
-                });
-              }
             }
 
             // Handle custom schedule rules broadcast
