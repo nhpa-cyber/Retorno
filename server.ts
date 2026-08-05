@@ -280,8 +280,20 @@ async function startServer() {
 
     sseClients.add(res);
 
-    // Initial state push
-    res.write(`data: ${JSON.stringify({ db: currentDb })}\n\n`);
+    // Initial state push including active server configuration, pending switch and schedule rules
+    let activeServerConfig: any = null;
+    try {
+      if (fs.existsSync(FIREBASE_CONFIG_FILE)) {
+        activeServerConfig = JSON.parse(fs.readFileSync(FIREBASE_CONFIG_FILE, 'utf-8'));
+      }
+    } catch (e) {}
+
+    res.write(`data: ${JSON.stringify({ 
+      db: currentDb, 
+      config: activeServerConfig, 
+      pendingDbSwitch,
+      scheduleRules: customScheduleRules
+    })}\n\n`);
 
     // Heartbeat every 15s to keep connection open
     const heartbeat = setInterval(() => {

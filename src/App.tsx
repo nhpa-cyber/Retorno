@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { User, Driver, Vehicle, Product, ActiveAsset, AuditSession, ReturnForecast, FiscalAlert, ImportedRoute, Vale } from './types';
 import { DEFAULT_PRODUCTS, DEFAULT_USERS } from './data';
 import { ImageDB } from './imageDb';
-import { isClientFirebaseActive, fetchDirectlyFromFirestore, saveDirectlyToFirestore, subscribeToFirestore, getClientAuthError, getIsFirestoreQuotaExceeded, setFirestoreQuotaExceeded, getActiveFirebaseConfig, switchActiveFirebaseConfig } from './clientFirebase';
+import { isClientFirebaseActive, fetchDirectlyFromFirestore, saveDirectlyToFirestore, subscribeToFirestore, getClientAuthError, getIsFirestoreQuotaExceeded, setFirestoreQuotaExceeded, getActiveFirebaseConfig, switchActiveFirebaseConfig, checkAndSyncServerConfig } from './clientFirebase';
 import Header from './components/Header';
 import ConferenteView from './components/ConferenteView';
 import FiscalView from './components/FiscalView';
@@ -524,10 +524,37 @@ export default function App() {
     }
   }, [clientPermissionDenied]);
 
-  // 4b. Setup global server events (DB switch countdowns, config changes, schedule rules) via SSE
+  // 4b. Setup global server events (DB switch countdowns, config changes, schedule rules) via SSE and periodic sync
   useEffect(() => {
     let eventSource: EventSource | null = null;
     let reconnectTimeout: any = null;
+
+    // Synchronize initial configuration from server (crucial for incognito mode and collaborators)
+    checkAndSyncServerConfig().then((syncedConfig) => {
+      if (syncedConfig && syncedConfig.projectId) {
+        const currentConfig = getActiveFirebaseConfig();
+        if (currentConfig?.projectId !== syncedConfig.projectId) {
+          console.log("[App] Configuração do servidor diferente da local. Atualizando banco...");
+          window.location.reload();
+        }
+      }
+    });
+
+    // Periodic polling backup (every 5 seconds) to guarantee sync across incognito tabs & collaborators
+    const syncInterval = setInterval(async () => {
+      try {
+        const currentLocal = getActiveFirebaseConfig();
+        const res = await fetch('/api/firebase/config');
+        const data = await res.json();
+        if (data && data.success && data.config && data.config.projectId) {
+          if (currentLocal?.projectId !== data.config.projectId) {
+            console.log(`[SyncInterval] Servidor trocou banco de dados para ${data.config.projectId}. Atualizando localmente...`);
+            await switchActiveFirebaseConfig(data.config, false);
+            window.location.reload();
+          }
+        }
+      } catch (e) {}
+    }, 5000);
 
     const connectSSE = () => {
       console.log("Conectando ao canal de sincronização de eventos do servidor (SSE)...");
@@ -549,7 +576,7 @@ export default function App() {
               const currentLocalConfig = getActiveFirebaseConfig();
               if (currentLocalConfig?.projectId !== data.config.projectId) {
                 console.log(`[SSE] Servidor informou troca de banco para ${data.config.projectId}. Atualizando localmente...`);
-                switchActiveFirebaseConfig(data.config).then(() => {
+                switchActiveFirebaseConfig(data.config, false).then(() => {
                   window.location.reload();
                 });
               }
@@ -595,6 +622,7 @@ export default function App() {
     connectSSE();
 
     return () => {
+      clearInterval(syncInterval);
       if (eventSource) {
         eventSource.close();
       }

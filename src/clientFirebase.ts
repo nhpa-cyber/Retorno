@@ -287,7 +287,7 @@ export function getActiveFirebaseConfig(): any {
   return firebaseConfig;
 }
 
-export async function switchActiveFirebaseConfig(newConfig: any): Promise<boolean> {
+export async function switchActiveFirebaseConfig(newConfig: any, updateServer: boolean = true): Promise<boolean> {
   try {
     hasClientPermissionError = false;
     isFirestoreQuotaExceeded = false;
@@ -302,13 +302,15 @@ export async function switchActiveFirebaseConfig(newConfig: any): Promise<boolea
         console.warn("[ClientFirebase] localStorage restrito (guia anônima). Usando memória.", e);
       }
     }
-    try {
-      await fetch('/api/firebase/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newConfig),
-      });
-    } catch (e) {}
+    if (updateServer) {
+      try {
+        await fetch('/api/firebase/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newConfig),
+        });
+      } catch (e) {}
+    }
 
     if (firestoreInstance) {
       try {
@@ -325,6 +327,26 @@ export async function switchActiveFirebaseConfig(newConfig: any): Promise<boolea
     console.error("[ClientFirebase] Erro ao alternar banco de dados:", err);
     return false;
   }
+}
+
+export async function checkAndSyncServerConfig(): Promise<any> {
+  try {
+    const res = await fetch('/api/firebase/config');
+    const data = await res.json();
+    if (data && data.success && data.config && data.config.projectId) {
+      const serverConfig = data.config;
+      const localConfig = getActiveFirebaseConfig();
+      if (!localConfig || localConfig.projectId !== serverConfig.projectId) {
+        console.log(`[ClientFirebase] Sincronizando com banco ativo do servidor: ${serverConfig.projectId}`);
+        await switchActiveFirebaseConfig(serverConfig, false);
+        return serverConfig;
+      }
+      return localConfig;
+    }
+  } catch (e) {
+    console.warn("[ClientFirebase] Não foi possível verificar config do servidor:", e);
+  }
+  return getActiveFirebaseConfig();
 }
 
 export async function syncFirebaseData(sourceConfig: any, targetConfig: any): Promise<{ success: boolean; count: number }> {
