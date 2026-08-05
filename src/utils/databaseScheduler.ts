@@ -23,18 +23,18 @@ export const DEFAULT_SCHEDULE_RULES: ScheduleRule[] = [
     triggerHour: 7,
     triggerMinute: 0,
     timeLabel: "07:00",
-    description: "Turno Diurno (07:00 às 13:50) ➔ Banco 01"
+    description: "Turno Diurno (07:00 às 13:56) ➔ Banco 01"
   },
   {
     id: "vespertino_banco_02",
     presetId: "banco-02",
     name: "Banco 02 (Vespertino)",
-    badge: "13:50 - Banco 02",
+    badge: "13:56 - Banco 02",
     badgeColor: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
     triggerHour: 13,
-    triggerMinute: 50,
-    timeLabel: "13:50",
-    description: "Turno Vespertino (13:50 às 20:00) ➔ Banco 02"
+    triggerMinute: 56,
+    timeLabel: "13:56",
+    description: "Turno Vespertino (13:56 às 20:00) ➔ Banco 02"
   },
   {
     id: "noturno_banco_03",
@@ -71,22 +71,22 @@ export function getScheduleRules(): ScheduleRule[] {
       if (Array.isArray(parsed) && parsed.length > 0) {
         let updated = false;
         parsed = parsed.map((r: ScheduleRule) => {
-          if (r.id === 'vespertino_banco_02' && r.triggerHour === 17 && r.triggerMinute === 0) {
+          if (r.id === 'vespertino_banco_02' && ((r.triggerHour === 17 && r.triggerMinute === 0) || (r.triggerHour === 13 && r.triggerMinute === 50))) {
             updated = true;
             return {
               ...r,
               triggerHour: 13,
-              triggerMinute: 50,
-              timeLabel: "13:50",
-              badge: "13:50 - BANCO-02",
-              description: "Turno Vespertino (13:50 às 20:00) ➔ Banco 02"
+              triggerMinute: 56,
+              timeLabel: "13:56",
+              badge: "13:56 - BANCO-02",
+              description: "Turno Vespertino (13:56 às 20:00) ➔ Banco 02"
             };
           }
-          if (r.id === 'diurno_banco_01' && r.description && r.description.includes('17:00')) {
+          if (r.id === 'diurno_banco_01' && r.description && (r.description.includes('17:00') || r.description.includes('13:50'))) {
             updated = true;
             return {
               ...r,
-              description: r.description.replace('17:00', '13:50')
+              description: r.description.replace('17:00', '13:56').replace('13:50', '13:56')
             };
           }
           return r;
@@ -272,7 +272,7 @@ export function getUpcomingDatabaseSwitchInfo(now = new Date()): UpcomingSwitchI
 }
 
 export async function triggerGlobalDatabaseSwitch(
-  seconds = 60,
+  seconds = 10,
   targetPresetId?: string,
   requestedBy?: string,
   requestedType: 'manual' | 'auto' = 'manual'

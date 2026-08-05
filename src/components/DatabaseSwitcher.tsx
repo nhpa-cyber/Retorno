@@ -382,9 +382,6 @@ export const DatabaseSwitcher: React.FC<DatabaseSwitcherProps> = ({ onSwitchComp
                 🚨 TROCA GLOBAL DE BANCO DE DADOS (TODOS OS USUÁRIOS)
               </span>
             </div>
-            <p className="text-xs text-indigo-100 leading-relaxed max-w-xl">
-              Inicie a troca de banco de dados em tempo real para todos os dispositivos conectados (PC e Celular) com contagem regressiva de 1 minuto e alerta no topo.
-            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -412,13 +409,13 @@ export const DatabaseSwitcher: React.FC<DatabaseSwitcherProps> = ({ onSwitchComp
                 const requesterText = currentUser 
                   ? `${currentUser.name || 'Gestor'} (${currentUser.username || 'g1009'})` 
                   : 'Gestor Administrador G1009 (g1009)';
-                await triggerGlobalDatabaseSwitch(60, undefined, requesterText, 'manual');
+                await triggerGlobalDatabaseSwitch(10, undefined, requesterText, 'manual');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
               className="bg-red-600 hover:bg-red-500 text-white font-extrabold px-4 py-2 rounded-lg text-xs flex items-center space-x-2 shadow-lg hover:shadow-red-500/30 transition-all cursor-pointer shrink-0 active:scale-95 border border-red-400"
             >
               <Clock className="h-4 w-4 animate-spin text-amber-300" />
-              <span>🚨 Trocar Banco de Dados (1 Minuto com Regressão)</span>
+              <span>🚨 Trocar Banco de Dados (10 Segundos com Regressão)</span>
             </button>
           </div>
         </div>

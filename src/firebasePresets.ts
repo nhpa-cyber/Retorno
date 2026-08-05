@@ -20,10 +20,10 @@ export interface FirebasePreset {
 export const FIREBASE_PRESETS: FirebasePreset[] = [
   {
     id: "banco-01",
-    name: "Banco 01 (Turno Diurno 07h-13h50)",
+    name: "Banco 01 (Turno Diurno 07h-13h56)",
     badge: "Diurno (07:00)",
     badgeColor: "bg-amber-500/15 text-amber-600 border-amber-500/30",
-    description: "banco-01-34be4 (Banco Principal / Turno Diurno 07:00 às 13:50)",
+    description: "banco-01-34be4 (Banco Principal / Turno Diurno 07:00 às 13:56)",
     config: {
       projectId: "banco-01-34be4",
       appId: "1:769319279792:web:0b1f64349b2a2b482aaf75",
@@ -38,10 +38,10 @@ export const FIREBASE_PRESETS: FirebasePreset[] = [
   },
   {
     id: "banco-02",
-    name: "Banco 02 (Turno Vespertino 13h50-20h)",
-    badge: "Vespertino (13:50)",
+    name: "Banco 02 (Turno Vespertino 13h56-20h)",
+    badge: "Vespertino (13:56)",
     badgeColor: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
-    description: "banco-02-2fb6b (Banco Segundo / Turno Vespertino 13:50 às 20:00)",
+    description: "banco-02-2fb6b (Banco Segundo / Turno Vespertino 13:56 às 20:00)",
     config: {
       projectId: "banco-02-2fb6b",
       appId: "1:364866790920:web:6f43aa475321a4a3f853bd",
