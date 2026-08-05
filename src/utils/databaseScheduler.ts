@@ -23,18 +23,18 @@ export const DEFAULT_SCHEDULE_RULES: ScheduleRule[] = [
     triggerHour: 7,
     triggerMinute: 0,
     timeLabel: "07:00",
-    description: "Turno Diurno (07:00 às 13:56) ➔ Banco 01"
+    description: "Turno Diurno (07:00 às 14:15) ➔ Banco 01"
   },
   {
     id: "vespertino_banco_02",
     presetId: "banco-02",
     name: "Banco 02 (Vespertino)",
-    badge: "13:56 - Banco 02",
+    badge: "14:15 - Banco 02",
     badgeColor: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
-    triggerHour: 13,
-    triggerMinute: 56,
-    timeLabel: "13:56",
-    description: "Turno Vespertino (13:56 às 20:00) ➔ Banco 02"
+    triggerHour: 14,
+    triggerMinute: 15,
+    timeLabel: "14:15",
+    description: "Turno Vespertino (14:15 às 20:00) ➔ Banco 02"
   },
   {
     id: "noturno_banco_03",
@@ -71,22 +71,22 @@ export function getScheduleRules(): ScheduleRule[] {
       if (Array.isArray(parsed) && parsed.length > 0) {
         let updated = false;
         parsed = parsed.map((r: ScheduleRule) => {
-          if (r.id === 'vespertino_banco_02' && ((r.triggerHour === 17 && r.triggerMinute === 0) || (r.triggerHour === 13 && r.triggerMinute === 50))) {
+          if (r.id === 'vespertino_banco_02' && (r.triggerHour !== 14 || r.triggerMinute !== 15)) {
             updated = true;
             return {
               ...r,
-              triggerHour: 13,
-              triggerMinute: 56,
-              timeLabel: "13:56",
-              badge: "13:56 - BANCO-02",
-              description: "Turno Vespertino (13:56 às 20:00) ➔ Banco 02"
+              triggerHour: 14,
+              triggerMinute: 15,
+              timeLabel: "14:15",
+              badge: "14:15 - BANCO-02",
+              description: "Turno Vespertino (14:15 às 20:00) ➔ Banco 02"
             };
           }
-          if (r.id === 'diurno_banco_01' && r.description && (r.description.includes('17:00') || r.description.includes('13:50'))) {
+          if (r.id === 'diurno_banco_01' && r.description && !r.description.includes('14:15')) {
             updated = true;
             return {
               ...r,
-              description: r.description.replace('17:00', '13:56').replace('13:50', '13:56')
+              description: "Turno Diurno (07:00 às 14:15) ➔ Banco 01"
             };
           }
           return r;
