@@ -530,30 +530,25 @@ export default function App() {
     let reconnectTimeout: any = null;
 
     // Synchronize initial configuration from server (crucial for incognito mode and collaborators)
-    checkAndSyncServerConfig().then((syncedConfig) => {
-      if (syncedConfig && syncedConfig.projectId) {
-        const currentConfig = getActiveFirebaseConfig();
-        if (currentConfig?.projectId !== syncedConfig.projectId) {
-          console.log("[App] Configuração do servidor diferente da local. Atualizando banco...");
-          window.dispatchEvent(new CustomEvent('server_config_updated', { detail: syncedConfig }));
-        }
+    checkAndSyncServerConfig().then((res) => {
+      if (res.changed && res.config && res.config.projectId) {
+        console.log("[App] Configuração do servidor diferente da local. Atualizando banco e recarregando...");
+        window.dispatchEvent(new CustomEvent('server_config_updated', { detail: res.config }));
+        window.location.reload();
       }
     });
 
-    // Periodic polling backup (every 3 seconds) to guarantee sync across incognito tabs, devices & collaborators
+    // Periodic polling backup (every 2 seconds) to guarantee sync across incognito tabs, devices & collaborators
     const syncInterval = setInterval(async () => {
       try {
-        const currentLocal = getActiveFirebaseConfig();
-        const res = await fetch('/api/firebase/config');
-        const data = await res.json();
-        if (data && data.success && data.config && data.config.projectId) {
-          if (currentLocal?.projectId !== data.config.projectId) {
-            console.log(`[SyncInterval] Servidor trocou banco de dados para ${data.config.projectId}. Atualizando localmente...`);
-            window.dispatchEvent(new CustomEvent('server_config_updated', { detail: data.config }));
-          }
+        const res = await checkAndSyncServerConfig();
+        if (res.changed && res.config && res.config.projectId) {
+          console.log(`[SyncInterval] Servidor trocou banco de dados para ${res.config.projectId}. Recarregando aplicação...`);
+          window.dispatchEvent(new CustomEvent('server_config_updated', { detail: res.config }));
+          window.location.reload();
         }
       } catch (e) {}
-    }, 3000);
+    }, 2000);
 
     const connectSSE = () => {
       console.log("Conectando ao canal de sincronização de eventos do servidor (SSE)...");
@@ -571,7 +566,14 @@ export default function App() {
 
             // Handle config update broadcast across all connected devices
             if (data.config && data.config.projectId) {
-              window.dispatchEvent(new CustomEvent('server_config_updated', { detail: data.config }));
+              const currentLocal = getActiveFirebaseConfig();
+              if (currentLocal?.projectId !== data.config.projectId) {
+                console.log(`[SSE] Servidor informou troca de banco de dados para ${data.config.projectId}. Recarregando...`);
+                switchActiveFirebaseConfig(data.config, false).then(() => {
+                  window.dispatchEvent(new CustomEvent('server_config_updated', { detail: data.config }));
+                  window.location.reload();
+                });
+              }
             }
 
             // Handle custom schedule rules broadcast

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { ShieldCheck, Truck, Lock, User as UserIcon, LogIn, Database, RefreshCw, FileText, Trash2, CheckCircle2, XCircle, SlidersHorizontal, Server } from 'lucide-react';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { isClientFirebaseActive } from '../clientFirebase';
+import { isClientFirebaseActive, checkAndSyncServerConfig } from '../clientFirebase';
 import { DatabaseSwitcher } from './DatabaseSwitcher';
 
 interface LoginViewProps {
@@ -31,39 +31,28 @@ export default function LoginView({ users, onLoginSuccess }: LoginViewProps) {
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
-    // Load initial configuration
+    // Load initial configuration and keep in sync with active server database
     const loadFirebaseConfig = async () => {
-      let cfg: any = null;
+      try {
+        const res = await checkAndSyncServerConfig();
+        const cfg = res.config || firebaseConfig;
 
-      // Try fetching from server endpoint
-      if (!cfg || !cfg.apiKey) {
-        try {
-          const res = await fetch('/api/firebase/config');
-          const data = await res.json();
-          if (data.success && data.config && data.config.apiKey) {
-            cfg = data.config;
-          }
-        } catch (e) {}
-      }
-
-      // Fallback to static firebaseConfig file
-      if (!cfg || !cfg.apiKey) {
-        cfg = firebaseConfig;
-      }
-
-      if (cfg) {
-        setApiKey(cfg.apiKey || '');
-        setAuthDomain(cfg.authDomain || '');
-        setProjectId(cfg.projectId || '');
-        setStorageBucket(cfg.storageBucket || '');
-        setMessagingSenderId(cfg.messagingSenderId || '');
-        setAppId(cfg.appId || '');
-        setMeasurementId(cfg.measurementId || '');
-        setFirestoreDatabaseId(cfg.firestoreDatabaseId || '(default)');
-      }
+        if (cfg) {
+          setApiKey(cfg.apiKey || '');
+          setAuthDomain(cfg.authDomain || '');
+          setProjectId(cfg.projectId || '');
+          setStorageBucket(cfg.storageBucket || '');
+          setMessagingSenderId(cfg.messagingSenderId || '');
+          setAppId(cfg.appId || '');
+          setMeasurementId(cfg.measurementId || '');
+          setFirestoreDatabaseId(cfg.firestoreDatabaseId || '(default)');
+        }
+      } catch (e) {}
     };
 
     loadFirebaseConfig();
+    const interval = setInterval(loadFirebaseConfig, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
