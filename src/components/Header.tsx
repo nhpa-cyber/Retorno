@@ -1265,60 +1265,60 @@ export default function Header({
 
       {/* Modal de Garantia de Conexão em Tempo Real (Firebase Multi-Dispositivo) */}
       {showConnectionModal && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-5 text-slate-800">
-            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
-              <div className="flex items-center space-x-3">
-                <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-600">
-                  <Wifi className="h-6 w-6 animate-pulse" />
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl border border-slate-200 space-y-4 sm:space-y-5 text-slate-800 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3 sm:pb-4 gap-2">
+              <div className="flex items-center space-x-2.5 sm:space-x-3">
+                <div className="p-2 sm:p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-600 shrink-0">
+                  <Wifi className="h-5 w-5 sm:h-6 sm:w-6 animate-pulse" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-1.5">
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
                     Garantia de Conexão em Tempo Real
                   </h3>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-[10px] sm:text-xs text-slate-500">
                     Sincronização Nuvem Multi-Dispositivos (Firebase Cloud Firestore)
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowConnectionModal(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer shrink-0"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="space-y-3 text-xs leading-relaxed">
-              <div className="p-3.5 bg-emerald-50/80 border border-emerald-200/80 rounded-xl space-y-1.5">
-                <div className="flex items-center justify-between font-semibold text-emerald-900">
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+              <div className="p-3 sm:p-3.5 bg-emerald-50/80 border border-emerald-200/80 rounded-xl space-y-1.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between font-semibold text-emerald-900 gap-1">
+                  <span className="flex items-center gap-1.5 text-xs">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping shrink-0"></span>
                     Status da Conexão:
                   </span>
-                  <span className="bg-emerald-600 text-white px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-mono">
+                  <span className="bg-emerald-600 text-white px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] uppercase tracking-wider font-mono self-start sm:self-auto">
                     100% Conectado
                   </span>
                 </div>
-                <p className="text-emerald-700">
+                <p className="text-emerald-700 text-[11px] sm:text-xs">
                   Qualquer mapa, alteração ou conferência realizada no <strong>GitHub Pages</strong>, <strong>Computador</strong> ou <strong>Celular</strong> é propagada instantaneamente em tempo real para todos os colaboradores!
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 font-mono text-[11px] bg-slate-50 p-3 rounded-xl border border-slate-200">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[10px] sm:text-[11px] bg-slate-50 p-2.5 sm:p-3 rounded-xl border border-slate-200">
+                <div className="min-w-0">
                   <span className="block text-[9px] font-sans uppercase tracking-wider text-slate-400 font-bold">Projeto Firebase</span>
                   <span className="font-semibold text-slate-700 truncate block">{(getActiveFirebaseConfig()?.projectId) || 'banco-01-34be4'}</span>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <span className="block text-[9px] font-sans uppercase tracking-wider text-slate-400 font-bold">Banco Firestore ID</span>
                   <span className="font-semibold text-slate-700 truncate block">{(getActiveFirebaseConfig()?.firestoreDatabaseId) || '(default)'}</span>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <span className="block text-[9px] font-sans uppercase tracking-wider text-slate-400 font-bold">Canal de Escuta</span>
                   <span className="font-semibold text-emerald-600 truncate block">onSnapshot (WebSockets)</span>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <span className="block text-[9px] font-sans uppercase tracking-wider text-slate-400 font-bold">Última Sincronização</span>
                   <span className="font-semibold text-slate-700 truncate block">
                     {lastSyncTimestamp ? new Date(lastSyncTimestamp).toLocaleTimeString('pt-BR') : 'Agora'}
@@ -1331,18 +1331,18 @@ export default function Header({
                 <DatabaseSwitcher compact={true} currentUser={currentUser} onSwitchComplete={() => setShowConnectionModal(false)} />
               </div>
 
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1">
-                <p className="font-bold text-amber-900 flex items-center gap-1">
+              <div className="p-2.5 sm:p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1">
+                <p className="font-bold text-amber-900 flex items-center gap-1 text-xs">
                   <ShieldCheck className="h-4 w-4 text-amber-600 shrink-0" />
                   Regras de Segurança Aplicadas
                 </p>
-                <p className="text-amber-800 text-[11px]">
+                <p className="text-amber-800 text-[10px] sm:text-[11px]">
                   O arquivo de permissões <code>firestore.rules</code> foi atualizado e implantado na nuvem, garantindo acesso completo e sem falhas de permissão para <code>importedRoutes</code>, <code>audits</code>, <code>customManual</code> e todas as coleções.
                 </p>
               </div>
             </div>
 
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+            <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
               <button
                 onClick={async () => {
                   setIsManualSyncing(true);
@@ -1358,15 +1358,15 @@ export default function Header({
                   }
                 }}
                 disabled={isManualSyncing}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl text-xs flex items-center space-x-2 transition cursor-pointer disabled:opacity-50"
+                className="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl text-xs flex items-center justify-center space-x-2 transition cursor-pointer disabled:opacity-50"
               >
-                <RefreshCw className={`h-4 w-4 ${isManualSyncing ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-4 w-4 shrink-0 ${isManualSyncing ? 'animate-spin' : ''}`} />
                 <span>{isManualSyncing ? "Sincronizando..." : "Forçar Sincronização Agora"}</span>
               </button>
 
               <button
                 onClick={() => setShowConnectionModal(false)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition cursor-pointer"
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition cursor-pointer text-center"
               >
                 Fechar
               </button>

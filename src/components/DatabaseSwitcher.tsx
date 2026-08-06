@@ -282,17 +282,17 @@ export const DatabaseSwitcher: React.FC<DatabaseSwitcherProps> = ({ onSwitchComp
   if (compact) {
     return (
       <div className="space-y-3">
-        <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs font-semibold text-slate-700 gap-1">
           <span className="flex items-center gap-1.5">
-            <Database className="h-4 w-4 text-blue-600" />
+            <Database className="h-4 w-4 text-blue-600 shrink-0" />
             Alternar Banco de Dados Ativo:
           </span>
-          <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded border">
+          <span className="text-[10px] sm:text-[11px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded border self-start sm:self-auto">
             ID: {activeProjectId || 'Nenhum'}
           </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {FIREBASE_PRESETS.map((preset) => {
             const isActive = activeProjectId === preset.config.projectId;
             const isLoading = loadingProjectId === preset.config.projectId;
@@ -303,22 +303,22 @@ export const DatabaseSwitcher: React.FC<DatabaseSwitcherProps> = ({ onSwitchComp
                 type="button"
                 onClick={() => handleSelectPreset(preset)}
                 disabled={isLoading}
-                className={`relative p-3 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between ${
+                className={`relative p-2.5 sm:p-3 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between ${
                   isActive
                     ? 'bg-blue-50 border-blue-500 shadow-sm ring-2 ring-blue-500/20'
                     : 'bg-white hover:bg-slate-50 border-slate-200'
                 }`}
               >
-                <div className="flex items-start justify-between w-full mb-1">
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase border ${preset.badgeColor}`}>
+                <div className="flex items-start justify-between w-full mb-1.5 gap-1">
+                  <span className={`text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded uppercase border ${preset.badgeColor} shrink-0`}>
                     {preset.badge}
                   </span>
                   {isActive && <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0" />}
                 </div>
 
-                <div>
-                  <h4 className="font-bold text-xs text-slate-900 truncate">{preset.name}</h4>
-                  <p className="font-mono text-[10px] text-slate-500 truncate">{preset.config.projectId}</p>
+                <div className="min-w-0">
+                  <h4 className="font-bold text-xs text-slate-900 leading-tight break-words">{preset.name}</h4>
+                  <p className="font-mono text-[10px] text-slate-500 truncate mt-0.5">{preset.config.projectId}</p>
                 </div>
 
                 {isLoading && (
@@ -336,7 +336,7 @@ export const DatabaseSwitcher: React.FC<DatabaseSwitcherProps> = ({ onSwitchComp
             statusMessage.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
           }`}>
             {statusMessage.type === 'success' ? <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" /> : <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />}
-            <span>{statusMessage.text}</span>
+            <span className="text-[11px] leading-tight">{statusMessage.text}</span>
           </div>
         )}
       </div>

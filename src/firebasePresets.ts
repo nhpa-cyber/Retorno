@@ -56,10 +56,10 @@ export const FIREBASE_PRESETS: FirebasePreset[] = [
   },
   {
     id: "banco-03",
-    name: "Banco 03 (Turno Noturno 22h-07h)",
-    badge: "Noturno (22:00)",
+    name: "Banco 03 (Turno Noturno 20h-07h)",
+    badge: "Noturno (20:00)",
     badgeColor: "bg-indigo-500/15 text-indigo-600 border-indigo-500/30",
-    description: "banco-03-6b1ea (Banco Terceiro / Turno Noturno 22:00 às 07:00)",
+    description: "banco-03-6b1ea (Banco Terceiro / Turno Noturno 20:00 às 07:00)",
     config: {
       projectId: "banco-03-6b1ea",
       appId: "1:645365828863:web:beb28f8f10226a02e210ca",
