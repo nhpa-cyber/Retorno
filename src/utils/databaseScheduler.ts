@@ -18,12 +18,12 @@ export const DEFAULT_SCHEDULE_RULES: ScheduleRule[] = [
     id: "diurno_banco_01",
     presetId: "banco-01",
     name: "Banco 01 (Diurno)",
-    badge: "07:00 - Banco 01",
+    badge: "05:00 - Banco 01",
     badgeColor: "bg-amber-500/15 text-amber-600 border-amber-500/30",
-    triggerHour: 7,
+    triggerHour: 5,
     triggerMinute: 0,
-    timeLabel: "07:00",
-    description: "Turno Diurno (07:00 às 17:00) ➔ Banco 01"
+    timeLabel: "05:00",
+    description: "Turno Diurno (05:00 às 17:00) ➔ Banco 01"
   },
   {
     id: "vespertino_banco_02",
@@ -45,7 +45,7 @@ export const DEFAULT_SCHEDULE_RULES: ScheduleRule[] = [
     triggerHour: 20,
     triggerMinute: 0,
     timeLabel: "20:00",
-    description: "Turno Noturno (20:00 às 07:00) ➔ Banco 03"
+    description: "Turno Noturno (20:00 às 05:00) ➔ Banco 03"
   }
 ];
 
@@ -71,10 +71,11 @@ export function getScheduleRules(): ScheduleRule[] {
       if (Array.isArray(parsed) && parsed.length > 0) {
         let updated = false;
         parsed = parsed.map((r: ScheduleRule) => {
-          if (r.id === 'vespertino_banco_02' && (r.triggerHour !== 17 || r.triggerMinute !== 0)) {
+          if (r.id === 'vespertino_banco_02' && (r.triggerHour !== 17 || r.triggerMinute !== 0 || r.name.includes('Noturno'))) {
             updated = true;
             return {
               ...r,
+              name: "Banco 02 (Vespertino)",
               triggerHour: 17,
               triggerMinute: 0,
               timeLabel: "17:00",
@@ -82,11 +83,22 @@ export function getScheduleRules(): ScheduleRule[] {
               description: "Turno Vespertino (17:00 às 20:00) ➔ Banco 02"
             };
           }
-          if (r.id === 'diurno_banco_01' && r.description && !r.description.includes('17:00')) {
+          if (r.id === 'diurno_banco_01' && (r.triggerHour !== 5 || r.triggerMinute !== 0 || !r.description?.includes('05:00'))) {
             updated = true;
             return {
               ...r,
-              description: "Turno Diurno (07:00 às 17:00) ➔ Banco 01"
+              triggerHour: 5,
+              triggerMinute: 0,
+              timeLabel: "05:00",
+              badge: "05:00 - BANCO-01",
+              description: "Turno Diurno (05:00 às 17:00) ➔ Banco 01"
+            };
+          }
+          if (r.id === 'noturno_banco_03' && (!r.description || !r.description.includes('05:00'))) {
+            updated = true;
+            return {
+              ...r,
+              description: "Turno Noturno (20:00 às 05:00) ➔ Banco 03"
             };
           }
           return r;

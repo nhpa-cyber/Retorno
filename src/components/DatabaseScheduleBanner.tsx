@@ -33,6 +33,7 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
 
   const isSwitchingRef = useRef<boolean>(false);
   const lastWarnedLevel = useRef<string>('none');
+  const lastHandledProjectIdRef = useRef<string | null>(null);
 
   const activeConfig = getActiveFirebaseConfig();
   const activeProjectId = activeConfig?.projectId || 'banco-01-34be4';
@@ -45,6 +46,7 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
   const performSwitch = async (targetPresetConfig: any, targetName: string) => {
     if (isSwitchingRef.current) return;
     isSwitchingRef.current = true;
+    lastHandledProjectIdRef.current = targetPresetConfig.projectId;
     setIsSyncing(true);
 
     try {
@@ -80,7 +82,8 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
     if (!switchedModalData) return;
 
     if (switchedModalData.countdown <= 0) {
-      window.location.reload();
+      setSwitchedModalData(null);
+      isSwitchingRef.current = false;
       return;
     }
 
@@ -88,7 +91,8 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
       setSwitchedModalData(prev => {
         if (!prev) return null;
         if (prev.countdown <= 1) {
-          window.location.reload();
+          clearInterval(modalInterval);
+          isSwitchingRef.current = false;
           return null;
         }
         return { ...prev, countdown: prev.countdown - 1 };
@@ -96,7 +100,7 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
     }, 1000);
 
     return () => clearInterval(modalInterval);
-  }, [switchedModalData]);
+  }, [switchedModalData !== null]);
 
   // SSE & Custom Event listeners for instant switch updates across all devices
   useEffect(() => {
@@ -142,7 +146,8 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
       const newConfig = e.detail;
       if (newConfig && newConfig.projectId) {
         const currentLocalConfig = getActiveFirebaseConfig();
-        if (currentLocalConfig?.projectId !== newConfig.projectId && !isSwitchingRef.current) {
+        if (currentLocalConfig?.projectId !== newConfig.projectId && lastHandledProjectIdRef.current !== newConfig.projectId && !isSwitchingRef.current) {
+          lastHandledProjectIdRef.current = newConfig.projectId;
           isSwitchingRef.current = true;
           const matchedPreset = FIREBASE_PRESETS.find(p => p.config.projectId === newConfig.projectId);
           const targetName = matchedPreset?.name || newConfig.projectId;
@@ -207,21 +212,9 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
         }
       }
 
-      // Continuous Monitoring: Enforce the correct database preset for the current time of day
-      if (enabled && !isSwitchingRef.current && simulationSeconds === null) {
-        const scheduledPresetId = getCurrentScheduledPresetId(now);
-        const scheduledPreset = FIREBASE_PRESETS.find(p => p.id === scheduledPresetId || p.config.projectId === scheduledPresetId);
-
-        if (scheduledPreset && activeProjectId !== scheduledPreset.config.projectId) {
-          console.log(`[DatabaseScheduler] Horário atual (${now.toLocaleTimeString()}) exige o banco ${scheduledPreset.name} (${scheduledPreset.config.projectId}), mas o banco ativo local é ${activeProjectId}. Trocando automaticamente...`);
-          performSwitch(scheduledPreset.config, scheduledPreset.name);
-          return;
-        }
-      }
-
-      // Check if trigger time reached
+      // Check if trigger time reached (triggers at scheduled minute, e.g. 20:00)
       if (info.shouldTriggerNow && !isSwitchingRef.current && enabled) {
-        if (info.nextPreset && activeProjectId !== info.nextPreset.config.projectId) {
+        if (info.nextPreset && activeProjectId !== info.nextPreset.config.projectId && lastHandledProjectIdRef.current !== info.nextPreset.config.projectId) {
           performSwitch(info.nextPreset.config, info.nextRule.name);
         }
       }
@@ -502,12 +495,13 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
               <button
                 type="button"
                 onClick={() => {
-                  window.location.reload();
+                  setSwitchedModalData(null);
+                  isSwitchingRef.current = false;
                 }}
                 className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs py-3 px-4 rounded-xl shadow-lg transition-all transform active:scale-98 cursor-pointer flex items-center justify-center space-x-2"
               >
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                <span>ENTENDIDO / RECARREGAR AGORA</span>
+                <CheckCircle2 className="h-4 w-4" />
+                <span>ENTENDIDO / CONTINUAR</span>
               </button>
             </div>
           </div>

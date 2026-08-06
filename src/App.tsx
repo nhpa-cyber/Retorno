@@ -533,7 +533,6 @@ export default function App() {
           console.log(`[App] Canal de Controle Firestore notificou troca para ${data.activeConfig.projectId}. Atualizando dispositivo...`);
           switchActiveFirebaseConfig(data.activeConfig, false, false).then(() => {
             window.dispatchEvent(new CustomEvent('server_config_updated', { detail: data.activeConfig }));
-            window.location.reload();
           });
         }
       }
