@@ -225,29 +225,41 @@ export interface UpcomingSwitchInfo {
 
 export function getUpcomingDatabaseSwitchInfo(now = new Date()): UpcomingSwitchInfo {
   const rules = getScheduleRules();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  
-  const sortedRules = [...rules].map(r => ({
-    rule: r,
-    mins: r.triggerHour * 60 + r.triggerMinute
-  })).sort((a, b) => a.mins - b.mins);
 
-  let nextItem = sortedRules.find(item => item.mins > currentMinutes);
-  let nextSwitchDate = new Date(now);
+  // Compute upcoming trigger dates for all rules
+  const candidateSwitches = rules.map(rule => {
+    const todayTrigger = new Date(now);
+    todayTrigger.setHours(rule.triggerHour, rule.triggerMinute, 0, 0);
 
-  if (nextItem) {
-    nextSwitchDate.setHours(nextItem.rule.triggerHour, nextItem.rule.triggerMinute, 0, 0);
-  } else {
-    nextItem = sortedRules[0] || { rule: DEFAULT_SCHEDULE_RULES[0], mins: 420 };
-    nextSwitchDate.setDate(nextSwitchDate.getDate() + 1);
-    nextSwitchDate.setHours(nextItem.rule.triggerHour, nextItem.rule.triggerMinute, 0, 0);
-  }
+    let targetDate = todayTrigger;
+    if (now.getTime() > todayTrigger.getTime()) {
+      const tomorrowTrigger = new Date(todayTrigger);
+      tomorrowTrigger.setDate(tomorrowTrigger.getDate() + 1);
+      targetDate = tomorrowTrigger;
+    }
 
-  const nextRule = nextItem.rule;
+    const diffMs = targetDate.getTime() - now.getTime();
+    return {
+      rule,
+      targetDate,
+      diffMs,
+      remainingSeconds: Math.max(0, Math.floor(diffMs / 1000))
+    };
+  });
+
+  candidateSwitches.sort((a, b) => a.targetDate.getTime() - b.targetDate.getTime());
+
+  const upcoming = candidateSwitches[0] || {
+    rule: DEFAULT_SCHEDULE_RULES[0],
+    targetDate: new Date(now.getTime() + 86400000),
+    diffMs: 86400000,
+    remainingSeconds: 86400
+  };
+
+  const nextRule = upcoming.rule;
   const nextPreset = FIREBASE_PRESETS.find(p => p.id === nextRule.presetId || p.config.projectId === nextRule.presetId) || FIREBASE_PRESETS[0];
-
-  const diffMs = nextSwitchDate.getTime() - now.getTime();
-  const remainingSeconds = Math.max(0, Math.floor(diffMs / 1000));
+  const nextSwitchDate = upcoming.targetDate;
+  const remainingSeconds = upcoming.remainingSeconds;
 
   const mins = Math.floor(remainingSeconds / 60);
   const secs = remainingSeconds % 60;
@@ -269,7 +281,7 @@ export function getUpcomingDatabaseSwitchInfo(now = new Date()): UpcomingSwitchI
   }
 
   const currentPresetId = getCurrentScheduledPresetId(now);
-  const shouldTriggerNow = remainingSeconds === 0;
+  const shouldTriggerNow = remainingSeconds <= 0;
 
   return {
     currentPresetId,
@@ -279,7 +291,7 @@ export function getUpcomingDatabaseSwitchInfo(now = new Date()): UpcomingSwitchI
     remainingSeconds,
     remainingFormatted,
     warningLevel,
-    shouldTriggerNow: remainingSeconds <= 0
+    shouldTriggerNow
   };
 }
 

@@ -35,8 +35,25 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
   const lastWarnedLevel = useRef<string>('none');
   const lastHandledProjectIdRef = useRef<string | null>(null);
 
-  const activeConfig = getActiveFirebaseConfig();
-  const activeProjectId = activeConfig?.projectId || 'banco-01-34be4';
+  const [activeProjectId, setActiveProjectId] = useState<string>(() => {
+    return getActiveFirebaseConfig()?.projectId || 'banco-01-34be4';
+  });
+
+  useEffect(() => {
+    const syncActiveId = () => {
+      const cfg = getActiveFirebaseConfig();
+      if (cfg?.projectId && cfg.projectId !== activeProjectId) {
+        setActiveProjectId(cfg.projectId);
+      }
+    };
+
+    window.addEventListener('firebase_config_changed', syncActiveId);
+    window.addEventListener('server_config_updated', syncActiveId);
+    return () => {
+      window.removeEventListener('firebase_config_changed', syncActiveId);
+      window.removeEventListener('server_config_updated', syncActiveId);
+    };
+  }, [activeProjectId]);
 
   // Determine next target preset
   const currentIndex = FIREBASE_PRESETS.findIndex(p => p.config.projectId === activeProjectId);
@@ -212,9 +229,19 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
         }
       }
 
-      // Check if trigger time reached (triggers at scheduled minute, e.g. 20:00)
-      if (info.shouldTriggerNow && !isSwitchingRef.current && enabled) {
-        if (info.nextPreset && activeProjectId !== info.nextPreset.config.projectId && lastHandledProjectIdRef.current !== info.nextPreset.config.projectId) {
+      // Enforce scheduled database for the current time slot
+      if (enabled && !isSwitchingRef.current && simulationSeconds === null) {
+        const scheduledPresetId = getCurrentScheduledPresetId(now);
+        const scheduledPreset = FIREBASE_PRESETS.find(p => p.id === scheduledPresetId || p.config.projectId === scheduledPresetId);
+
+        if (scheduledPreset && activeProjectId !== scheduledPreset.config.projectId && lastHandledProjectIdRef.current !== scheduledPreset.config.projectId) {
+          console.log(`[DatabaseScheduler] Horário atual (${now.toLocaleTimeString()}) pertence ao turno de ${scheduledPreset.name} (${scheduledPreset.config.projectId}), mas o banco ativo é ${activeProjectId}. Trocando automaticamente...`);
+          performSwitch(scheduledPreset.config, scheduledPreset.name);
+          return;
+        }
+
+        // Check if exact trigger time reached
+        if (info.shouldTriggerNow && info.nextPreset && activeProjectId !== info.nextPreset.config.projectId && lastHandledProjectIdRef.current !== info.nextPreset.config.projectId) {
           performSwitch(info.nextPreset.config, info.nextRule.name);
         }
       }
