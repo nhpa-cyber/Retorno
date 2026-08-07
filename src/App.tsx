@@ -531,7 +531,7 @@ export default function App() {
         const currentLocal = getActiveFirebaseConfig();
         if (currentLocal?.projectId !== data.activeConfig.projectId) {
           console.log(`[App] Canal de Controle Firestore notificou troca para ${data.activeConfig.projectId}. Atualizando dispositivo...`);
-          switchActiveFirebaseConfig(data.activeConfig, false, false).then(() => {
+          switchActiveFirebaseConfig(data.activeConfig, false, false, false).then(() => {
             window.dispatchEvent(new CustomEvent('server_config_updated', { detail: data.activeConfig }));
           });
         }

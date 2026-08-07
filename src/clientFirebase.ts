@@ -462,7 +462,8 @@ export function getActiveFirebaseConfig(): any {
 export async function switchActiveFirebaseConfig(
   newConfig: any,
   updateServer: boolean = true,
-  publishToControlChannel: boolean = true
+  publishToControlChannel: boolean = true,
+  syncDataFirst: boolean = true
 ): Promise<boolean> {
   try {
     hasClientPermissionError = false;
@@ -476,6 +477,25 @@ export async function switchActiveFirebaseConfig(
     } else if (newConfig && newConfig.projectId) {
       const p = FIREBASE_PRESETS.find(pr => pr.id === newConfig.projectId || pr.config.projectId === newConfig.projectId);
       if (p) normalizedConfig = p.config;
+    }
+
+    const currentSourceConfig = memoryActiveConfig || getActiveFirebaseConfig();
+
+    if (
+      syncDataFirst &&
+      currentSourceConfig &&
+      normalizedConfig &&
+      currentSourceConfig.projectId &&
+      normalizedConfig.projectId &&
+      currentSourceConfig.projectId !== normalizedConfig.projectId
+    ) {
+      console.log(`[ClientFirebase] Sincronizando e transferindo todos os dados pendentes de '${currentSourceConfig.projectId}' para '${normalizedConfig.projectId}'...`);
+      try {
+        const syncResult = await syncFirebaseData(currentSourceConfig, normalizedConfig);
+        console.log(`[ClientFirebase] Sincronização concluída com sucesso! ${syncResult.count} documentos transferidos.`);
+      } catch (syncErr) {
+        console.warn(`[ClientFirebase] Erro na sincronização pré-troca de banco:`, syncErr);
+      }
     }
 
     memoryActiveConfig = normalizedConfig;

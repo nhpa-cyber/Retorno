@@ -214,7 +214,7 @@ export const DatabaseSwitcher: React.FC<DatabaseSwitcherProps> = ({ onSwitchComp
         }
       }
 
-      const success = await switchActiveFirebaseConfig(preset.config);
+      const success = await switchActiveFirebaseConfig(preset.config, true, true, !syncBeforeSwitch);
       if (success) {
         setStatusMessage({
           type: 'success',

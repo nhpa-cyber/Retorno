@@ -170,7 +170,7 @@ export const DatabaseScheduleBanner: React.FC<DatabaseScheduleBannerProps> = ({ 
           const targetName = matchedPreset?.name || newConfig.projectId;
           const reqText = switchRequester || 'Gestor Administrador G1009 (g1009)';
 
-          switchActiveFirebaseConfig(newConfig, false).then(() => {
+          switchActiveFirebaseConfig(newConfig, false, true, false).then(() => {
             setSwitchedModalData({
               name: targetName,
               projectId: newConfig.projectId,
